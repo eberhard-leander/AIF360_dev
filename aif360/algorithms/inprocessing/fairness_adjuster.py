@@ -50,7 +50,7 @@ class FairnessAdjuster(Transformer):
             debias (bool, optional): Learn a classifier with or without
                 debiasing.
         """
-        super(AdversarialDebiasing, self).__init__(
+        super(FairnessAdjuster, self).__init__(
             unprivileged_groups=unprivileged_groups, privileged_groups=privileged_groups
         )
 
