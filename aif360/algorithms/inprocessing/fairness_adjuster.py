@@ -426,7 +426,9 @@ class FairnessAdjuster(Transformer):
             # TODO: handle this better
             pred_label_output = self.base_pred_labels
         else:
-            pred_label_output = self.adjuster_preds
+            self.base_sess
+            pred_label_output = self.base_pred_labels
+            # pred_label_output = self.adjuster_preds
 
         if self.seed is not None:
             np.random.seed(self.seed)
