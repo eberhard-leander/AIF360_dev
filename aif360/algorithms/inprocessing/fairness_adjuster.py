@@ -235,8 +235,8 @@ class FairnessAdjuster(Transformer):
                             % (epoch, i, pred_labels_loss_value)
                         )
 
-        # get the scores from the base classifier
-        self.base_classifier_scores = self.predict(dataset, sess=self.base_sess)
+        # get the scores from the base classifier. This is a numpy array
+        self._base_classifier_scores = self.predict(dataset, sess=self.base_sess).scores
 
         #################################################################################
         # adjust the predictions of the base classifier with the fairness adjuster
