@@ -63,7 +63,12 @@ class FairnessAdjuster(Transformer):
             raise ValueError("Only one unprivileged_group or privileged_group supported.")
         self.protected_attribute_name = list(self.unprivileged_groups[0].keys())[0]
 
-        self.sess = sess
+        # create a new session for internal use for the base classifier
+        self.base_sess = tf.Session()
+
+        # we keep the adjuster session for external use
+        self.adjuster_sess = sess
+
         self.adversary_loss_weight = adversary_loss_weight
         self.num_epochs = num_epochs
         self.batch_size = batch_size
@@ -196,8 +201,8 @@ class FairnessAdjuster(Transformer):
                 classifier_grads, global_step=global_step
             )
 
-            self.sess.run(tf.global_variables_initializer())
-            self.sess.run(tf.local_variables_initializer())
+            self.base_sess.run(tf.global_variables_initializer())
+            self.base_sess.run(tf.local_variables_initializer())
 
             # Begin training
             for epoch in range(self.num_epochs):
@@ -221,7 +226,7 @@ class FairnessAdjuster(Transformer):
                         self.keep_prob: 0.8,
                     }
 
-                    _, pred_labels_loss_value = self.sess.run(
+                    _, pred_labels_loss_value = self.base_sess.run(
                         [classifier_minimizer, pred_labels_loss], feed_dict=batch_feed_dict
                     )
                     if i % 200 == 0:
@@ -229,6 +234,9 @@ class FairnessAdjuster(Transformer):
                             "epoch %d; iter: %d; batch classifier loss: %f"
                             % (epoch, i, pred_labels_loss_value)
                         )
+
+        # get the scores from the base classifier
+        self.base_classifier_scores = self.predict(dataset, sess=self.base_sess)
 
         #################################################################################
         # adjust the predictions of the base classifier with the fairness adjuster
@@ -378,13 +386,15 @@ class FairnessAdjuster(Transformer):
         #                     )
         return self
 
-    def predict(self, dataset):
+    def predict(self, dataset, sess=None):
         """Obtain the predictions for the provided dataset using the fair
         classifier learned.
 
         Args:
             dataset (BinaryLabelDataset): Dataset containing labels that needs
                 to be transformed.
+            sess: Tensorflow session containing the trained model. Defaults to the adversary session
+
         Returns:
             dataset (BinaryLabelDataset): Transformed dataset.
         """
