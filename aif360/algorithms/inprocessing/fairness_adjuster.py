@@ -106,6 +106,31 @@ class FairnessAdjuster(Transformer):
 
         return pred_label, pred_logit
 
+    def _adjuster_model(self, features, features_dim, keep_prob):
+        # same model architecture as the classifier for now, but this does not need to be the case
+        with tf.variable_scope("adjuster_model"):
+            W1 = tf.get_variable(
+                "W1",
+                [features_dim, self.classifier_num_hidden_units],
+                initializer=tf.initializers.glorot_uniform(seed=self.seed1),
+            )
+            b1 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1")
+
+            h1 = tf.nn.relu(tf.matmul(features, W1) + b1)
+            h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seed2)
+
+            W2 = tf.get_variable(
+                "W2",
+                [self.classifier_num_hidden_units, 1],
+                initializer=tf.initializers.glorot_uniform(seed=self.seed3),
+            )
+            b2 = tf.Variable(tf.zeros(shape=[1]), name="b2")
+
+            # the only difference is we don't apply the sigmoid here
+            pred = tf.matmul(h1, W2) + b2
+
+        return pred
+
     def _adversary_model(self, pred_logits, true_labels):
         """Compute the adversary predictions for the protected attribute."""
         with tf.variable_scope("adversary_model"):
@@ -154,20 +179,20 @@ class FairnessAdjuster(Transformer):
         temp_labels[(dataset.labels == dataset.favorable_label).ravel(), 0] = 1.0
         temp_labels[(dataset.labels == dataset.unfavorable_label).ravel(), 0] = 0.0
 
+        # Setup placeholders (reused for both the classifier and adversary)
+        self.features_ph = tf.placeholder(tf.float32, shape=[None, self.features_dim])
+        self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
+        self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
+        self.keep_prob = tf.placeholder(tf.float32)
+
         #################################################################################
         # train the base classifier whose predictions will be adjusted afterwards
         #################################################################################
         with tf.variable_scope(self.scope_name):
             num_train_samples, self.features_dim = np.shape(dataset.features)
 
-            # Setup placeholders
-            self.features_ph = tf.placeholder(tf.float32, shape=[None, self.features_dim])
-            self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
-            self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
-            self.keep_prob = tf.placeholder(tf.float32)
-
             # Obtain classifier predictions and classifier loss
-            self.pred_labels, pred_logits = self._classifier_model(
+            self.base_pred_labels, pred_logits = self._classifier_model(
                 self.features_ph, self.features_dim, self.keep_prob
             )
             pred_labels_loss = tf.reduce_mean(
@@ -240,18 +265,13 @@ class FairnessAdjuster(Transformer):
 
         #################################################################################
         # adjust the predictions of the base classifier with the fairness adjuster
+        # code largely copied over from the adversarial debiasing implementation
         #################################################################################
         # with tf.variable_scope(self.scope_name):
         #     num_train_samples, self.features_dim = np.shape(dataset.features)
 
-        #     # Setup placeholders
-        #     self.features_ph = tf.placeholder(tf.float32, shape=[None, self.features_dim])
-        #     self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
-        #     self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
-        #     self.keep_prob = tf.placeholder(tf.float32)
-
-        #     # Obtain classifier predictions and classifier loss
-        #     self.pred_labels, pred_logits = self._classifier_model(
+        #     # Obtain adjusted predictions and classifier loss
+        #     self.adjuster_preds = self._adjuster_model(
         #         self.features_ph, self.features_dim, self.keep_prob
         #     )
         #     pred_labels_loss = tf.reduce_mean(
@@ -329,8 +349,8 @@ class FairnessAdjuster(Transformer):
         #                 pred_protected_attributes_loss, var_list=adversary_vars
         #             )  # , global_step=global_step)
 
-        #     self.sess.run(tf.global_variables_initializer())
-        #     self.sess.run(tf.local_variables_initializer())
+        #     self.adjuster_sess.run(tf.global_variables_initializer())
+        #     self.adjuster_sess.run(tf.local_variables_initializer())
 
         #     # Begin training
         #     for epoch in range(self.num_epochs):
@@ -355,7 +375,7 @@ class FairnessAdjuster(Transformer):
         #             }
         #             if self.debias:
         #                 _, _, pred_labels_loss_value, pred_protected_attributes_loss_vale = (
-        #                     self.sess.run(
+        #                     self.adjuster_sess.run(
         #                         [
         #                             classifier_minimizer,
         #                             adversary_minimizer,
@@ -403,6 +423,11 @@ class FairnessAdjuster(Transformer):
             # TODO: change to self.adjuster_sess
             sess = self.base_sess
 
+            # TODO: handle this better
+            pred_label_output = self.base_pred_labels
+        else:
+            pred_label_output = self.adjuster_preds
+
         if self.seed is not None:
             np.random.seed(self.seed)
 
@@ -432,7 +457,7 @@ class FairnessAdjuster(Transformer):
                 self.keep_prob: 1.0,
             }
 
-            pred_labels += sess.run(self.pred_labels, feed_dict=batch_feed_dict)[:, 0].tolist()
+            pred_labels += sess.run(pred_label_output, feed_dict=batch_feed_dict)[:, 0].tolist()
             samples_covered += len(batch_features)
 
         # Mutated, fairer dataset with new labels
