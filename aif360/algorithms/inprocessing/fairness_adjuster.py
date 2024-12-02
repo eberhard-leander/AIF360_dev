@@ -16,18 +16,9 @@ except ImportError as error:
 from aif360.algorithms import Transformer
 
 
-class AdversarialDebiasing(Transformer):
-    """Adversarial debiasing is an in-processing technique that learns a
-    classifier to maximize prediction accuracy and simultaneously reduce an
-    adversary's ability to determine the protected attribute from the
-    predictions [5]_. This approach leads to a fair classifier as the
-    predictions cannot carry any group discrimination information that the
-    adversary can exploit.
-
-    References:
-        .. [5] B. H. Zhang, B. Lemoine, and M. Mitchell, "Mitigating Unwanted
-           Biases with Adversarial Learning," AAAI/ACM Conference on Artificial
-           Intelligence, Ethics, and Society, 2018.
+class FairnessAdjuster(Transformer):
+    """
+    Fairness adjuster using Adversarial Debiasing.
     """
 
     def __init__(
