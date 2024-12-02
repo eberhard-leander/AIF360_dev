@@ -399,6 +399,10 @@ class FairnessAdjuster(Transformer):
             dataset (BinaryLabelDataset): Transformed dataset.
         """
 
+        if sess is None:
+            # TODO: change to self.adjuster_sess
+            sess = self.base_sess
+
         if self.seed is not None:
             np.random.seed(self.seed)
 
@@ -428,7 +432,7 @@ class FairnessAdjuster(Transformer):
                 self.keep_prob: 1.0,
             }
 
-            pred_labels += self.sess.run(self.pred_labels, feed_dict=batch_feed_dict)[:, 0].tolist()
+            pred_labels += sess.run(self.pred_labels, feed_dict=batch_feed_dict)[:, 0].tolist()
             samples_covered += len(batch_features)
 
         # Mutated, fairer dataset with new labels
