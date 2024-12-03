@@ -179,6 +179,7 @@ class FairnessAdjuster(Transformer):
         self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
         self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
         self.keep_prob = tf.placeholder(tf.float32)
+        self.base_pred_ph = tf.placeholder(tf.float32, shape=[None, 1])
 
         #################################################################################
         # train the base classifier whose predictions will be adjusted afterwards
@@ -272,10 +273,9 @@ class FairnessAdjuster(Transformer):
 
             # apply the adjuster's predictions to the base model's predictions
             logit = lambda x: tf.math.log(x / (1 - x))
-            expit = lambda x: tf.nn.sigmoid(x)
 
-            # note: self._base_classifier_scores is constant and should not be updated.
-            pred_logits = logit(self._base_classifier_scores) + self.adjuster_preds
+            # note: adjuster predictions should not be updated during prediction
+            pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
 
             # mean of the squared adjuster predictions
             pred_labels_loss = tf.reduce_mean(self.adjuster_preds**2)
@@ -364,11 +364,14 @@ class FairnessAdjuster(Transformer):
                         [-1, 1],
                     )
 
+                    batch_base_predictions = self._base_classifier_scores[batch_ids]
+
                     batch_feed_dict = {
                         self.features_ph: batch_features,
                         self.true_labels_ph: batch_labels,
                         self.protected_attributes_ph: batch_protected_attributes,
                         self.keep_prob: 0.8,
+                        self.base_pred_ph: batch_base_predictions,
                     }
                     if self.debias:
                         _, _, pred_labels_loss_value, pred_protected_attributes_loss_vale = (
