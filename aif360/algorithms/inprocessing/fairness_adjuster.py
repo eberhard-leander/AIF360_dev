@@ -63,12 +63,7 @@ class FairnessAdjuster(Transformer):
             raise ValueError("Only one unprivileged_group or privileged_group supported.")
         self.protected_attribute_name = list(self.unprivileged_groups[0].keys())[0]
 
-        # create a new session for internal use for the base classifier
-        self.base_sess = tf.Session()
-
-        # we keep the adjuster session for external use
-        self.adjuster_sess = sess
-
+        self.sess = sess
         self.adversary_loss_weight = adversary_loss_weight
         self.num_epochs = num_epochs
         self.batch_size = batch_size
@@ -226,8 +221,8 @@ class FairnessAdjuster(Transformer):
                 classifier_grads, global_step=global_step
             )
 
-            self.base_sess.run(tf.global_variables_initializer())
-            self.base_sess.run(tf.local_variables_initializer())
+            self.sess.run(tf.global_variables_initializer())
+            self.sess.run(tf.local_variables_initializer())
 
             # Begin training
             for epoch in range(self.num_epochs):
@@ -251,7 +246,7 @@ class FairnessAdjuster(Transformer):
                         self.keep_prob: 0.8,
                     }
 
-                    _, pred_labels_loss_value = self.base_sess.run(
+                    _, pred_labels_loss_value = self.sess.run(
                         [classifier_minimizer, pred_labels_loss], feed_dict=batch_feed_dict
                     )
                     if i % 200 == 0:
@@ -261,9 +256,7 @@ class FairnessAdjuster(Transformer):
                         )
 
         # get the scores from the base classifier. This is a numpy array
-        self._base_classifier_scores = self.predict(dataset, sess=self.base_sess).scores.astype(
-            np.float32
-        )
+        self._base_classifier_scores = self.predict(dataset).scores.astype(np.float32)
 
         #################################################################################
         # adjust the predictions of the base classifier with the fairness adjuster
@@ -353,8 +346,8 @@ class FairnessAdjuster(Transformer):
                         pred_protected_attributes_loss, var_list=adversary_vars
                     )  # , global_step=global_step)
 
-            self.adjuster_sess.run(tf.global_variables_initializer())
-            self.adjuster_sess.run(tf.local_variables_initializer())
+            self.sess.run(tf.global_variables_initializer())
+            self.sess.run(tf.local_variables_initializer())
 
             # Begin training
             for epoch in range(self.num_epochs):
@@ -379,7 +372,7 @@ class FairnessAdjuster(Transformer):
                     }
                     if self.debias:
                         _, _, pred_labels_loss_value, pred_protected_attributes_loss_vale = (
-                            self.adjuster_sess.run(
+                            self.sess.run(
                                 [
                                     classifier_minimizer,
                                     adversary_minimizer,
@@ -410,7 +403,7 @@ class FairnessAdjuster(Transformer):
                             )
         return self
 
-    def predict(self, dataset, sess=None):
+    def predict(self, dataset):
         """Obtain the predictions for the provided dataset using the fair
         classifier learned.
 
@@ -422,17 +415,7 @@ class FairnessAdjuster(Transformer):
         Returns:
             dataset (BinaryLabelDataset): Transformed dataset.
         """
-
-        if sess is None:
-            # TODO: change to self.adjuster_sess
-            sess = self.base_sess
-
-            # TODO: handle this better
-            pred_label_output = self.base_pred_labels
-        else:
-            self.base_sess
-            pred_label_output = self.base_pred_labels
-            # pred_label_output = self.adjuster_preds
+        pred_label_output = self.base_pred_labels
 
         if self.seed is not None:
             np.random.seed(self.seed)
@@ -463,7 +446,9 @@ class FairnessAdjuster(Transformer):
                 self.keep_prob: 1.0,
             }
 
-            pred_labels += sess.run(pred_label_output, feed_dict=batch_feed_dict)[:, 0].tolist()
+            pred_labels += self.sess.run(pred_label_output, feed_dict=batch_feed_dict)[
+                :, 0
+            ].tolist()
             samples_covered += len(batch_features)
 
         # Mutated, fairer dataset with new labels
