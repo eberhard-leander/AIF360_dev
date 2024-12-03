@@ -257,6 +257,10 @@ class FairnessAdjuster(Transformer):
         # get the scores from the base classifier. This is a numpy array
         self._base_classifier_scores = self.predict(dataset).scores.astype(np.float32).copy()
 
+        # reset sess
+        self._sess = self.sess
+        self.sess = tf.Session()
+
         #################################################################################
         # adjust the predictions of the base classifier with the fairness adjuster
         # code largely copied over from the adversarial debiasing implementation
@@ -402,6 +406,9 @@ class FairnessAdjuster(Transformer):
                                 "epoch %d; iter: %d; batch adjuster loss: %f"
                                 % (epoch, i, pred_labels_loss_value)
                             )
+
+        # switch back to original session
+        self.sess = self._sess
         return self
 
     def predict(self, dataset):
