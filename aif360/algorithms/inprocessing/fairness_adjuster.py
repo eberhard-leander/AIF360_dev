@@ -261,7 +261,9 @@ class FairnessAdjuster(Transformer):
                         )
 
         # get the scores from the base classifier. This is a numpy array
-        self._base_classifier_scores = self.predict(dataset, sess=self.base_sess).scores
+        self._base_classifier_scores = self.predict(dataset, sess=self.base_sess).scores.astype(
+            np.float32
+        )
 
         #################################################################################
         # adjust the predictions of the base classifier with the fairness adjuster
