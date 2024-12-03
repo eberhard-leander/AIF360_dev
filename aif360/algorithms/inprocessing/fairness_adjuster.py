@@ -294,10 +294,10 @@ class FairnessAdjuster(Transformer):
                 )
 
             # Setup optimizers with learning rates
-            global_step = tf.Variable(0, trainable=False)
+            global_step2 = tf.Variable(0, trainable=False)
             starter_learning_rate = 0.001
             learning_rate = tf.train.exponential_decay(
-                starter_learning_rate, global_step, 1000, 0.96, staircase=True
+                starter_learning_rate, global_step2, 1000, 0.96, staircase=True
             )
             adjuster_opt = tf.train.AdamOptimizer(learning_rate)
             if self.debias:
@@ -338,7 +338,7 @@ class FairnessAdjuster(Transformer):
                     grad -= self.adversary_loss_weight * adversary_grads[var]
 
             adjuster_minimizer = adjuster_opt.apply_gradients(
-                adjuster_grads, global_step=global_step
+                adjuster_grads, global_step=global_step2
             )
 
             if self.debias:
