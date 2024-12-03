@@ -82,17 +82,17 @@ class FairnessAdjuster(Transformer):
             W1 = tf.get_variable(
                 "W1",
                 [features_dim, self.classifier_num_hidden_units],
-                initializer=tf.initializers.glorot_uniform(seed=self.seed1),
+                initializer=tf.initializers.glorot_uniform(seed=self.seeds[0]),
             )
             b1 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1")
 
             h1 = tf.nn.relu(tf.matmul(features, W1) + b1)
-            h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seed2)
+            h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seeds[1])
 
             W2 = tf.get_variable(
                 "W2",
                 [self.classifier_num_hidden_units, 1],
-                initializer=tf.initializers.glorot_uniform(seed=self.seed3),
+                initializer=tf.initializers.glorot_uniform(seed=self.seeds[2]),
             )
             b2 = tf.Variable(tf.zeros(shape=[1]), name="b2")
 
@@ -107,17 +107,17 @@ class FairnessAdjuster(Transformer):
             W1 = tf.get_variable(
                 "W1",
                 [features_dim, self.classifier_num_hidden_units],
-                initializer=tf.initializers.glorot_uniform(seed=self.seed4),
+                initializer=tf.initializers.glorot_uniform(seed=self.seeds[3]),
             )
             b1 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1")
 
             h1 = tf.nn.relu(tf.matmul(features, W1) + b1)
-            h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seed5)
+            h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seeds[4])
 
             W2 = tf.get_variable(
                 "W2",
                 [self.classifier_num_hidden_units, 1],
-                initializer=tf.initializers.glorot_uniform(seed=self.seed6),
+                initializer=tf.initializers.glorot_uniform(seed=self.seeds[5]),
             )
             b2 = tf.Variable(tf.zeros(shape=[1]), name="b2")
 
@@ -133,7 +133,7 @@ class FairnessAdjuster(Transformer):
             s = tf.sigmoid((1 + tf.abs(c)) * pred_logits)
 
             W2 = tf.get_variable(
-                "W2", [3, 1], initializer=tf.initializers.glorot_uniform(seed=self.seed7)
+                "W2", [3, 1], initializer=tf.initializers.glorot_uniform(seed=self.seeds[6])
             )
             b2 = tf.Variable(tf.zeros(shape=[1]), name="b2")
 
@@ -164,9 +164,7 @@ class FairnessAdjuster(Transformer):
         if self.seed is not None:
             np.random.seed(self.seed)
         ii32 = np.iinfo(np.int32)
-        self.seed1, self.seed2, self.seed3, self.seed4 = np.random.randint(
-            ii32.min, ii32.max, size=4
-        )
+        self.seeds = list(np.random.randint(ii32.min, ii32.max, size=7))
 
         # Map the dataset labels to 0 and 1.
         temp_labels = dataset.labels.copy()
