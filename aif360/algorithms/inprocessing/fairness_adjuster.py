@@ -192,20 +192,20 @@ class FairnessAdjuster(Transformer):
         #################################################################################
         with tf.variable_scope(self.scope_name):
             # Setup placeholders
-            self.features_ph = tf.placeholder(tf.float32, shape=[None, self.features_dim])
-            self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
-            self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
-            self.keep_prob = tf.placeholder(tf.float32)
+            self.features_ph1 = tf.placeholder(tf.float32, shape=[None, self.features_dim])
+            self.protected_attributes_ph1 = tf.placeholder(tf.float32, shape=[None, 1])
+            self.true_labels_ph1 = tf.placeholder(tf.float32, shape=[None, 1])
+            self.keep_prob1 = tf.placeholder(tf.float32)
 
             num_train_samples, self.features_dim = np.shape(dataset.features)
 
             # Obtain classifier predictions and classifier loss
             self.base_pred_labels, self.base_pred_logits = self._classifier_model(
-                self.features_ph, self.features_dim, self.keep_prob
+                self.features_ph1, self.features_dim, self.keep_prob1
             )
             pred_labels_loss = tf.reduce_mean(
                 tf.nn.sigmoid_cross_entropy_with_logits(
-                    labels=self.true_labels_ph, logits=self.base_pred_logits
+                    labels=self.true_labels_ph1, logits=self.base_pred_logits
                 )
             )
 
@@ -253,10 +253,10 @@ class FairnessAdjuster(Transformer):
                     )
 
                     batch_feed_dict = {
-                        self.features_ph: batch_features,
-                        self.true_labels_ph: batch_labels,
-                        self.protected_attributes_ph: batch_protected_attributes,
-                        self.keep_prob: 0.8,
+                        self.features_ph1: batch_features,
+                        self.true_labels_ph1: batch_labels,
+                        self.protected_attributes_ph1: batch_protected_attributes,
+                        self.keep_prob1: 0.8,
                     }
 
                     _, pred_labels_loss_value = self.base_sess.run(
@@ -277,21 +277,21 @@ class FairnessAdjuster(Transformer):
         #################################################################################
         with tf.variable_scope(self.scope_name):
             # Setup placeholders
-            self.features_ph = tf.placeholder(tf.float32, shape=[None, self.features_dim])
-            self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
-            self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
-            self.keep_prob = tf.placeholder(tf.float32)
-            self.base_pred_ph = tf.placeholder(tf.float32, shape=[None, 1])
+            self.features_ph2 = tf.placeholder(tf.float32, shape=[None, self.features_dim])
+            self.protected_attributes_ph2 = tf.placeholder(tf.float32, shape=[None, 1])
+            self.true_labels_ph2 = tf.placeholder(tf.float32, shape=[None, 1])
+            self.keep_prob2 = tf.placeholder(tf.float32)
+            self.base_pred_ph2 = tf.placeholder(tf.float32, shape=[None, 1])
 
             num_train_samples, self.features_dim = np.shape(dataset.features)
 
             # Obtain adjusted predictions and adjuster loss
             self.adjuster_preds = self._adjuster_model(
-                self.features_ph, self.features_dim, self.keep_prob
+                self.features_ph2, self.features_dim, self.keep_prob2
             )
 
             # note: base predictions should not be updated during prediction
-            pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
+            pred_logits = logit(self.base_pred_ph2) + self.adjuster_preds
 
             # mean of the squared adjuster predictions
             adjuster_loss = tf.reduce_mean(
@@ -303,17 +303,18 @@ class FairnessAdjuster(Transformer):
             if self.debias:
                 # Obtain adversary predictions and adversary loss
                 pred_protected_attributes_labels, pred_protected_attributes_logits = (
-                    self._adversary_model(pred_logits, self.true_labels_ph)
+                    self._adversary_model(pred_logits, self.true_labels_ph2)
                 )
                 pred_protected_attributes_loss = tf.reduce_mean(
                     tf.nn.sigmoid_cross_entropy_with_logits(
-                        labels=self.protected_attributes_ph, logits=pred_protected_attributes_logits
+                        labels=self.protected_attributes_ph2,
+                        logits=pred_protected_attributes_logits,
                     )
                 )
 
             pred_labels_loss = tf.reduce_mean(
                 tf.nn.sigmoid_cross_entropy_with_logits(
-                    labels=self.true_labels_ph, logits=pred_logits
+                    labels=self.true_labels_ph2, logits=pred_logits
                 )
             )
 
@@ -394,11 +395,11 @@ class FairnessAdjuster(Transformer):
                     batch_base_predictions = self._base_classifier_scores[batch_ids]
 
                     batch_feed_dict = {
-                        self.features_ph: batch_features,
-                        self.true_labels_ph: batch_labels,
-                        self.protected_attributes_ph: batch_protected_attributes,
-                        self.keep_prob: 0.8,
-                        self.base_pred_ph: batch_base_predictions,
+                        self.features_ph2: batch_features,
+                        self.true_labels_ph2: batch_labels,
+                        self.protected_attributes_ph2: batch_protected_attributes,
+                        self.keep_prob2: 0.8,
+                        self.base_pred_ph2: batch_base_predictions,
                     }
                     if self.debias:
                         (
@@ -477,10 +478,10 @@ class FairnessAdjuster(Transformer):
             )
 
             batch_feed_dict = {
-                self.features_ph: batch_features,
-                self.true_labels_ph: batch_labels,
-                self.protected_attributes_ph: batch_protected_attributes,
-                self.keep_prob: 1.0,
+                self.features_ph1: batch_features,
+                self.true_labels_ph1: batch_labels,
+                self.protected_attributes_ph1: batch_protected_attributes,
+                self.keep_prob1: 1.0,
             }
 
             batch_base_pred_logits = self.base_sess.run(
@@ -488,8 +489,14 @@ class FairnessAdjuster(Transformer):
             )[:, 0]
 
             # get the adjuster predictions
+            batch_feed_dict = {
+                self.features_ph2: batch_features,
+                self.true_labels_ph2: batch_labels,
+                self.protected_attributes_ph2: batch_protected_attributes,
+                self.keep_prob2: 1.0,
+            }
             if hasattr(self, "adjuster_preds"):
-                batch_feed_dict[self.base_pred_ph] = batch_base_pred_logits.reshape(-1, 1)
+                batch_feed_dict[self.base_pred_ph2] = batch_base_pred_logits.reshape(-1, 1)
                 batch_adjuster_preds = self.adjuster_sess.run(
                     self.adjuster_preds, feed_dict=batch_feed_dict
                 )[:, 0]
