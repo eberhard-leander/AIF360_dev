@@ -2,6 +2,7 @@
 # v1: train the base classifier and adjuster internally
 
 import numpy as np
+from scipy import expit
 
 try:
     import tensorflow.compat.v1 as tf
@@ -466,9 +467,7 @@ class FairnessAdjuster(Transformer):
                 batch_adjuster_preds = 0.0
 
             # apply the adjuster predictions fo the predicted logits
-            batch_pred_logits = tf.nn.sigmoid(
-                batch_base_pred_logits + batch_adjuster_preds
-            ).tolist()
+            batch_pred_logits = expit(batch_base_pred_logits + batch_adjuster_preds)
 
             pred_labels += batch_pred_logits
 
