@@ -278,7 +278,7 @@ class FairnessAdjuster(Transformer):
                 self.features_ph, self.features_dim, self.keep_prob
             )
 
-            # note: adjuster predictions should not be updated during prediction
+            # note: base predictions should not be updated during prediction
             pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
 
             # mean of the squared adjuster predictions
@@ -294,6 +294,12 @@ class FairnessAdjuster(Transformer):
                         labels=self.protected_attributes_ph, logits=pred_protected_attributes_logits
                     )
                 )
+
+            pred_labels_loss = tf.reduce_mean(
+                tf.nn.sigmoid_cross_entropy_with_logits(
+                    labels=self.true_labels_ph, logits=pred_logits
+                )
+            )
 
             # Setup optimizers with learning rates
             global_step2 = tf.Variable(0, trainable=False)
@@ -385,6 +391,7 @@ class FairnessAdjuster(Transformer):
                                     adjuster_minimizer,
                                     adversary_minimizer,
                                     adjuster_norm_loss,
+                                    pred_labels_loss,
                                     pred_protected_attributes_loss,
                                 ],
                                 feed_dict=batch_feed_dict,
@@ -392,11 +399,12 @@ class FairnessAdjuster(Transformer):
                         )
                         if i % 200 == 0:
                             print(
-                                "epoch %d; iter: %d; batch adjuster loss: %f; batch adversarial loss: %f"
+                                "epoch %d; iter: %d; batch adjuster loss: %f; batch classifier loss; %f; batch adversarial loss: %f"
                                 % (
                                     epoch,
                                     i,
                                     adjuster_norm_loss_value,
+                                    pred_labels_loss_value,
                                     pred_protected_attributes_loss_vale,
                                 )
                             )
@@ -466,7 +474,7 @@ class FairnessAdjuster(Transformer):
             else:
                 batch_adjuster_preds = 0.0
 
-            # apply the adjuster predictions fo the predicted logits
+            # apply the adjuster predictions to the predicted logits
             batch_pred_logits = expit(batch_base_pred_logits + batch_adjuster_preds).tolist()
 
             pred_labels += batch_pred_logits
