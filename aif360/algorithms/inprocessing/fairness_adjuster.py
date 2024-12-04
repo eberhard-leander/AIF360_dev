@@ -333,8 +333,8 @@ class FairnessAdjuster(Transformer):
 
                 if self.debias:
                     # Subtract of the component of the gradient that aligns with the adversary
-                    # unit_adversary_grad = normalize(adversary_grads[var])
-                    # grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
+                    unit_adversary_grad = normalize(adversary_grads[var])
+                    grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
 
                     grad -= self.adversary_loss_weight * adversary_grads[var]
 
