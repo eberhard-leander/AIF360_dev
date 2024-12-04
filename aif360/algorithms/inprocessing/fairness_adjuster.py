@@ -16,6 +16,10 @@ except ImportError as error:
 from aif360.algorithms import Transformer
 
 
+def logit(p):
+    return tf.math.log(p / (1 - p))
+
+
 class FairnessAdjuster(Transformer):
     """
     Fairness adjuster using Adversarial Debiasing.
@@ -190,12 +194,12 @@ class FairnessAdjuster(Transformer):
             num_train_samples, self.features_dim = np.shape(dataset.features)
 
             # Obtain classifier predictions and classifier loss
-            self.base_pred_labels, pred_logits = self._classifier_model(
+            self.base_pred_labels, self.base_pred_logits = self._classifier_model(
                 self.features_ph, self.features_dim, self.keep_prob
             )
             pred_labels_loss = tf.reduce_mean(
                 tf.nn.sigmoid_cross_entropy_with_logits(
-                    labels=self.true_labels_ph, logits=pred_logits
+                    labels=self.true_labels_ph, logits=self.base_pred_logits
                 )
             )
 
@@ -272,9 +276,6 @@ class FairnessAdjuster(Transformer):
             self.adjuster_preds = self._adjuster_model(
                 self.features_ph, self.features_dim, self.keep_prob
             )
-
-            # apply the adjuster's predictions to the base model's predictions
-            logit = lambda p: tf.math.log(p / (1 - p))
 
             # note: adjuster predictions should not be updated during prediction
             pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
@@ -451,9 +452,23 @@ class FairnessAdjuster(Transformer):
                 self.keep_prob: 1.0,
             }
 
-            pred_labels += self.base_sess.run(self.base_pred_labels, feed_dict=batch_feed_dict)[
-                :, 0
-            ].tolist()
+            batch_base_pred_logits = self.base_sess.run(
+                self.base_pred_logits, feed_dict=batch_feed_dict
+            )[:, 0]
+
+            # get the adjuster predictions
+            batch_feed_dict[self.base_preds_ph] = batch_base_pred_logits
+            batch_adjuster_preds = self.adjuster_sess.run(
+                self.adjuster_preds, feed_dict=batch_feed_dict
+            )[:, 0]
+
+            # apply the adjuster predictions fo the predicted logits
+            batch_pred_logits = tf.nn.sigmoid(
+                batch_base_pred_logits + batch_adjuster_preds
+            ).tolist()
+
+            pred_labels += batch_pred_logits
+
             samples_covered += len(batch_features)
 
         # Mutated, fairer dataset with new labels
