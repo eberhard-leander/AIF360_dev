@@ -489,14 +489,15 @@ class FairnessAdjuster(Transformer):
             )[:, 0]
 
             # get the adjuster predictions
-            batch_feed_dict = {
-                self.features_ph2: batch_features,
-                self.true_labels_ph2: batch_labels,
-                self.protected_attributes_ph2: batch_protected_attributes,
-                self.keep_prob2: 1.0,
-            }
             if hasattr(self, "adjuster_preds"):
-                batch_feed_dict[self.base_pred_ph2] = batch_base_pred_logits.reshape(-1, 1)
+                batch_feed_dict = {
+                    self.features_ph2: batch_features,
+                    self.true_labels_ph2: batch_labels,
+                    self.protected_attributes_ph2: batch_protected_attributes,
+                    self.keep_prob2: 1.0,
+                    self.base_pred_ph2: batch_base_pred_logits.reshape(-1, 1),
+                }
+
                 batch_adjuster_preds = self.adjuster_sess.run(
                     self.adjuster_preds, feed_dict=batch_feed_dict
                 )[:, 0]
