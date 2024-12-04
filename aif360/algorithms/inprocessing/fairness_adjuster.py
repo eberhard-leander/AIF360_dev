@@ -334,7 +334,7 @@ class FairnessAdjuster(Transformer):
                     unit_adversary_grad = normalize(adversary_grads[var])
 
                     # Subtract of the component of the gradient that aligns with the adversary
-                    grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
+                    # grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
                     grad -= self.adversary_loss_weight * adversary_grads[var]
 
             adjuster_minimizer = adjuster_opt.apply_gradients(
@@ -346,7 +346,7 @@ class FairnessAdjuster(Transformer):
                 with tf.control_dependencies([adjuster_minimizer]):
                     adversary_minimizer = adversary_opt.minimize(
                         pred_protected_attributes_loss, var_list=adversary_vars
-                    )  # , global_step=global_step)
+                    )  # , global_step=global_step2)
 
             self.sess.run(tf.global_variables_initializer())
             self.sess.run(tf.local_variables_initializer())
