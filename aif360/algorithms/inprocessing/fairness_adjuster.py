@@ -282,7 +282,11 @@ class FairnessAdjuster(Transformer):
             pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
 
             # mean of the squared adjuster predictions
-            adjuster_norm_loss = tf.reduce_mean(self.adjuster_preds**2)
+            adjuster_norm_loss = tf.reduce_mean(
+                tf.losses.mean_squared_error(
+                    tf.zeros_like(self.adjuster_preds), self.adjuster_preds
+                )
+            )
 
             if self.debias:
                 # Obtain adversary predictions and adversary loss
