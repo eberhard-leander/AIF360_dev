@@ -187,17 +187,16 @@ class FairnessAdjuster(Transformer):
         temp_labels[(dataset.labels == dataset.favorable_label).ravel(), 0] = 1.0
         temp_labels[(dataset.labels == dataset.unfavorable_label).ravel(), 0] = 0.0
 
-        # Setup placeholders (reused for both the classifier and adversary)
-        self.features_ph = tf.placeholder(tf.float32, shape=[None, self.features_dim])
-        self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
-        self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
-        self.keep_prob = tf.placeholder(tf.float32)
-        self.base_pred_ph = tf.placeholder(tf.float32, shape=[None, 1])
-
         #################################################################################
         # train the base classifier whose predictions will be adjusted afterwards
         #################################################################################
         with tf.variable_scope(self.scope_name):
+            # Setup placeholders
+            self.features_ph = tf.placeholder(tf.float32, shape=[None, self.features_dim])
+            self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
+            self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
+            self.keep_prob = tf.placeholder(tf.float32)
+
             num_train_samples, self.features_dim = np.shape(dataset.features)
 
             # Obtain classifier predictions and classifier loss
@@ -277,6 +276,13 @@ class FairnessAdjuster(Transformer):
         # code largely copied over from the adversarial debiasing implementation
         #################################################################################
         with tf.variable_scope(self.scope_name):
+            # Setup placeholders
+            self.features_ph = tf.placeholder(tf.float32, shape=[None, self.features_dim])
+            self.protected_attributes_ph = tf.placeholder(tf.float32, shape=[None, 1])
+            self.true_labels_ph = tf.placeholder(tf.float32, shape=[None, 1])
+            self.keep_prob = tf.placeholder(tf.float32)
+            self.base_pred_ph = tf.placeholder(tf.float32, shape=[None, 1])
+
             num_train_samples, self.features_dim = np.shape(dataset.features)
 
             # Obtain adjusted predictions and adjuster loss
