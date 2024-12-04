@@ -385,17 +385,21 @@ class FairnessAdjuster(Transformer):
                         self.base_pred_ph: batch_base_predictions,
                     }
                     if self.debias:
-                        _, _, adjuster_norm_loss_value, pred_protected_attributes_loss_vale = (
-                            self.adjuster_sess.run(
-                                [
-                                    adjuster_minimizer,
-                                    adversary_minimizer,
-                                    adjuster_norm_loss,
-                                    pred_labels_loss,
-                                    pred_protected_attributes_loss,
-                                ],
-                                feed_dict=batch_feed_dict,
-                            )
+                        (
+                            _,
+                            _,
+                            adjuster_norm_loss_value,
+                            pred_labels_loss_value,
+                            pred_protected_attributes_loss_vale,
+                        ) = self.adjuster_sess.run(
+                            [
+                                adjuster_minimizer,
+                                adversary_minimizer,
+                                adjuster_norm_loss,
+                                pred_labels_loss,
+                                pred_protected_attributes_loss,
+                            ],
+                            feed_dict=batch_feed_dict,
                         )
                         if i % 200 == 0:
                             print(
