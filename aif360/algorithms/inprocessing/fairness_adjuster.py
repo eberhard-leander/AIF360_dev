@@ -280,7 +280,7 @@ class FairnessAdjuster(Transformer):
             pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
 
             # mean of the squared adjuster predictions
-            pred_labels_loss = tf.reduce_mean(self.adjuster_preds**2)
+            adjuster_norm_loss = tf.reduce_mean(self.adjuster_preds**2)
 
             if self.debias:
                 # Obtain adversary predictions and adversary loss
@@ -327,7 +327,7 @@ class FairnessAdjuster(Transformer):
             adjuster_grads = []
             # compute the adjuster gradients
             for grad, var in adjuster_opt.compute_gradients(
-                pred_labels_loss, var_list=adjuster_vars
+                adjuster_norm_loss, var_list=adjuster_vars
             ):
                 adjuster_grads.append((grad, var))
 
@@ -377,12 +377,12 @@ class FairnessAdjuster(Transformer):
                         self.base_pred_ph: batch_base_predictions,
                     }
                     if self.debias:
-                        _, _, pred_labels_loss_value, pred_protected_attributes_loss_vale = (
+                        _, _, adjuster_norm_loss_value, pred_protected_attributes_loss_vale = (
                             self.sess.run(
                                 [
                                     adjuster_minimizer,
                                     adversary_minimizer,
-                                    pred_labels_loss,
+                                    adjuster_norm_loss,
                                     pred_protected_attributes_loss,
                                 ],
                                 feed_dict=batch_feed_dict,
@@ -394,18 +394,18 @@ class FairnessAdjuster(Transformer):
                                 % (
                                     epoch,
                                     i,
-                                    pred_labels_loss_value,
+                                    adjuster_norm_loss_value,
                                     pred_protected_attributes_loss_vale,
                                 )
                             )
                     else:
-                        _, pred_labels_loss_value = self.sess.run(
-                            [adjuster_minimizer, pred_labels_loss], feed_dict=batch_feed_dict
+                        _, adjuster_norm_loss_value = self.sess.run(
+                            [adjuster_minimizer, adjuster_norm_loss], feed_dict=batch_feed_dict
                         )
                         if i % 200 == 0:
                             print(
                                 "epoch %d; iter: %d; batch adjuster loss: %f"
-                                % (epoch, i, pred_labels_loss_value)
+                                % (epoch, i, adjuster_norm_loss_value)
                             )
 
         # switch back to original session
