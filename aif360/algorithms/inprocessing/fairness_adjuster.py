@@ -63,7 +63,11 @@ class FairnessAdjuster(Transformer):
             raise ValueError("Only one unprivileged_group or privileged_group supported.")
         self.protected_attribute_name = list(self.unprivileged_groups[0].keys())[0]
 
-        self.sess = sess
+        # separate session for the base model and the adjuster since the base model should be fixed
+        # during the adjuster training
+        self.base_sess = tf.Session()
+        self.adjuster_sess = sess
+
         self.adversary_loss_weight = adversary_loss_weight
         self.num_epochs = num_epochs
         self.batch_size = batch_size
@@ -220,8 +224,8 @@ class FairnessAdjuster(Transformer):
                 classifier_grads, global_step=global_step
             )
 
-            self.sess.run(tf.global_variables_initializer())
-            self.sess.run(tf.local_variables_initializer())
+            self.base_sess.run(tf.global_variables_initializer())
+            self.base_sess.run(tf.local_variables_initializer())
 
             # Begin training
             for epoch in range(self.num_epochs):
@@ -245,7 +249,7 @@ class FairnessAdjuster(Transformer):
                         self.keep_prob: 0.8,
                     }
 
-                    _, pred_labels_loss_value = self.sess.run(
+                    _, pred_labels_loss_value = self.base_sess.run(
                         [classifier_minimizer, pred_labels_loss], feed_dict=batch_feed_dict
                     )
                     if i % 200 == 0:
@@ -256,10 +260,6 @@ class FairnessAdjuster(Transformer):
 
         # get the scores from the base classifier. This is a numpy array
         self._base_classifier_scores = self.predict(dataset).scores.astype(np.float32).copy()
-
-        # reset sess
-        self._sess = self.sess
-        self.sess = tf.Session()
 
         #################################################################################
         # adjust the predictions of the base classifier with the fairness adjuster
@@ -349,8 +349,8 @@ class FairnessAdjuster(Transformer):
                         pred_protected_attributes_loss, var_list=adversary_vars
                     )  # , global_step=global_step2)
 
-            self.sess.run(tf.global_variables_initializer())
-            self.sess.run(tf.local_variables_initializer())
+            self.adjuster_sess.run(tf.global_variables_initializer())
+            self.adjuster_sess.run(tf.local_variables_initializer())
 
             # Begin training
             for epoch in range(self.num_epochs):
@@ -378,7 +378,7 @@ class FairnessAdjuster(Transformer):
                     }
                     if self.debias:
                         _, _, adjuster_norm_loss_value, pred_protected_attributes_loss_vale = (
-                            self.sess.run(
+                            self.adjuster_sess.run(
                                 [
                                     adjuster_minimizer,
                                     adversary_minimizer,
@@ -399,7 +399,7 @@ class FairnessAdjuster(Transformer):
                                 )
                             )
                     else:
-                        _, adjuster_norm_loss_value = self.sess.run(
+                        _, adjuster_norm_loss_value = self.adjuster_sess.run(
                             [adjuster_minimizer, adjuster_norm_loss], feed_dict=batch_feed_dict
                         )
                         if i % 200 == 0:
@@ -408,8 +408,6 @@ class FairnessAdjuster(Transformer):
                                 % (epoch, i, adjuster_norm_loss_value)
                             )
 
-        # switch back to original session
-        self.sess = self._sess
         return self
 
     def predict(self, dataset):
@@ -453,7 +451,7 @@ class FairnessAdjuster(Transformer):
                 self.keep_prob: 1.0,
             }
 
-            pred_labels += self.sess.run(self.base_pred_labels, feed_dict=batch_feed_dict)[
+            pred_labels += self.base_sess.run(self.base_pred_labels, feed_dict=batch_feed_dict)[
                 :, 0
             ].tolist()
             samples_covered += len(batch_features)
