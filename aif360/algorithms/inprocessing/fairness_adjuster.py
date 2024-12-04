@@ -457,7 +457,7 @@ class FairnessAdjuster(Transformer):
             )[:, 0]
 
             # get the adjuster predictions
-            batch_feed_dict[self.base_preds_ph] = batch_base_pred_logits
+            batch_feed_dict[self.base_pred_ph] = batch_base_pred_logits
             batch_adjuster_preds = self.adjuster_sess.run(
                 self.adjuster_preds, feed_dict=batch_feed_dict
             )[:, 0]
