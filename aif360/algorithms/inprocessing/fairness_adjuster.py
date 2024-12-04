@@ -2,7 +2,7 @@
 # v1: train the base classifier and adjuster internally
 
 import numpy as np
-from scipy import expit
+from scipy.special import expit
 
 try:
     import tensorflow.compat.v1 as tf
@@ -301,8 +301,8 @@ class FairnessAdjuster(Transformer):
             learning_rate = tf.train.exponential_decay(
                 starter_learning_rate, global_step2, 1000, 0.96, staircase=True
             )
-            # adjuster_opt = tf.train.AdamOptimizer(learning_rate)
-            adjuster_opt = tf.train.GradientDescentOptimizer(starter_learning_rate * 0.1)
+            adjuster_opt = tf.train.AdamOptimizer(learning_rate)
+            # adjuster_opt = tf.train.GradientDescentOptimizer(starter_learning_rate * 0.1)
             if self.debias:
                 adversary_opt = tf.train.AdamOptimizer(learning_rate)
 
@@ -355,7 +355,7 @@ class FairnessAdjuster(Transformer):
             self.adjuster_sess.run(tf.local_variables_initializer())
 
             # Begin training
-            for epoch in range(self.num_epochs // 10):
+            for epoch in range(self.num_epochs):
                 shuffled_ids = np.random.choice(num_train_samples, num_train_samples, replace=False)
                 for i in range(num_train_samples // self.batch_size):
                     batch_ids = shuffled_ids[self.batch_size * i : self.batch_size * (i + 1)]
@@ -459,7 +459,7 @@ class FairnessAdjuster(Transformer):
 
             # get the adjuster predictions
             if hasattr(self, "adjuster_preds"):
-                batch_feed_dict[self.base_pred_ph] = batch_base_pred_logits
+                batch_feed_dict[self.base_pred_ph] = batch_base_pred_logits.reshape(-1, 1)
                 batch_adjuster_preds = self.adjuster_sess.run(
                     self.adjuster_preds, feed_dict=batch_feed_dict
                 )[:, 0]
@@ -467,7 +467,7 @@ class FairnessAdjuster(Transformer):
                 batch_adjuster_preds = 0.0
 
             # apply the adjuster predictions fo the predicted logits
-            batch_pred_logits = expit(batch_base_pred_logits + batch_adjuster_preds)
+            batch_pred_logits = expit(batch_base_pred_logits + batch_adjuster_preds).tolist()
 
             pred_labels += batch_pred_logits
 
