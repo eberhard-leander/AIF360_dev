@@ -424,6 +424,8 @@ class FairnessAdjuster(Transformer):
                                 % (epoch, i, adjuster_norm_loss_value)
                             )
 
+        writer = tf.summary.FileWriter("output", self.adjuster_sess.graph)
+        writer.close()
         return self
 
     def predict(self, dataset):
