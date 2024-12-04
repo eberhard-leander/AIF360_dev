@@ -300,7 +300,7 @@ class FairnessAdjuster(Transformer):
                 starter_learning_rate, global_step2, 1000, 0.96, staircase=True
             )
             # adjuster_opt = tf.train.AdamOptimizer(learning_rate)
-            adjuster_opt = tf.train.SGDOptimizer(learning_rate)
+            adjuster_opt = tf.train.GradientDescentOptimizer(learning_rate)
             if self.debias:
                 adversary_opt = tf.train.AdamOptimizer(learning_rate)
 
