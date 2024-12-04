@@ -88,25 +88,21 @@ class FairnessAdjuster(Transformer):
     def _classifier_model(self, features, features_dim, keep_prob):
         """Compute the classifier predictions for the outcome variable."""
         with tf.variable_scope("classifier_model"):
-            # W1 = tf.get_variable(
-            #     "W1",
-            #     [features_dim, self.classifier_num_hidden_units],
-            #     initializer=tf.initializers.glorot_uniform(seed=self.seeds[0]),
-            # )
-            W1 = tf.Variable(
-                tf.zeros(shape=[features_dim, self.classifier_num_hidden_units], name="W1")
+            W1 = tf.get_variable(
+                "W1",
+                [features_dim, self.classifier_num_hidden_units],
+                initializer=tf.initializers.glorot_uniform(seed=self.seeds[0]),
             )
             b1 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1")
 
             h1 = tf.nn.relu(tf.matmul(features, W1) + b1)
             h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seeds[1])
 
-            # W2 = tf.get_variable(
-            #     "W2",
-            #     [self.classifier_num_hidden_units, 1],
-            #     initializer=tf.initializers.glorot_uniform(seed=self.seeds[2]),
-            # )
-            W2 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units, 1], name="W2"))
+            W2 = tf.get_variable(
+                "W2",
+                [self.classifier_num_hidden_units, 1],
+                initializer=tf.initializers.glorot_uniform(seed=self.seeds[2]),
+            )
             b2 = tf.Variable(tf.zeros(shape=[1]), name="b2")
 
             pred_logit = tf.matmul(h1, W2) + b2
@@ -117,21 +113,27 @@ class FairnessAdjuster(Transformer):
     def _adjuster_model(self, features, features_dim, keep_prob):
         # same model architecture as the classifier for now, but this does not need to be the case
         with tf.variable_scope("adjuster_model"):
-            W1 = tf.get_variable(
-                "W1",
-                [features_dim, self.classifier_num_hidden_units],
-                initializer=tf.initializers.glorot_uniform(seed=self.seeds[3]),
+            # W1 = tf.get_variable(
+            #     "W1",
+            #     [features_dim, self.classifier_num_hidden_units],
+            #     initializer=tf.initializers.glorot_uniform(seed=self.seeds[3]),
+            # )
+            W1 = tf.Variable(
+                tf.zeros(shape=[features_dim, self.classifier_num_hidden_units], name="W1")
             )
+
             b1 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1")
 
             h1 = tf.nn.relu(tf.matmul(features, W1) + b1)
             h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seeds[4])
 
-            W2 = tf.get_variable(
-                "W2",
-                [self.classifier_num_hidden_units, 1],
-                initializer=tf.initializers.glorot_uniform(seed=self.seeds[5]),
-            )
+            # W2 = tf.get_variable(
+            #     "W2",
+            #     [self.classifier_num_hidden_units, 1],
+            #     initializer=tf.initializers.glorot_uniform(seed=self.seeds[5]),
+            # )
+            W2 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units, 1], name="W2"))
+
             b2 = tf.Variable(tf.zeros(shape=[1]), name="b2")
 
             # the only difference is we don't apply the sigmoid here
@@ -286,7 +288,7 @@ class FairnessAdjuster(Transformer):
             pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
 
             # mean of the squared adjuster predictions
-            adjuster_norm_loss = tf.reduce_mean(
+            adjuster_loss = tf.reduce_mean(
                 tf.losses.mean_squared_error(
                     tf.zeros_like(self.adjuster_preds), self.adjuster_preds
                 )
@@ -344,9 +346,7 @@ class FairnessAdjuster(Transformer):
 
             adjuster_grads = []
             # compute the adjuster gradients
-            for grad, var in adjuster_opt.compute_gradients(
-                adjuster_norm_loss, var_list=adjuster_vars
-            ):
+            for grad, var in adjuster_opt.compute_gradients(adjuster_loss, var_list=adjuster_vars):
                 adjuster_grads.append((grad, var))
 
                 if self.debias:
@@ -405,7 +405,7 @@ class FairnessAdjuster(Transformer):
                             [
                                 adjuster_minimizer,
                                 adversary_minimizer,
-                                adjuster_norm_loss,
+                                adjuster_loss,
                                 pred_labels_loss,
                                 pred_protected_attributes_loss,
                             ],
@@ -424,7 +424,7 @@ class FairnessAdjuster(Transformer):
                             )
                     else:
                         _, adjuster_norm_loss_value = self.adjuster_sess.run(
-                            [adjuster_minimizer, adjuster_norm_loss], feed_dict=batch_feed_dict
+                            [adjuster_minimizer, adjuster_loss], feed_dict=batch_feed_dict
                         )
                         if i % 200 == 0:
                             print(
