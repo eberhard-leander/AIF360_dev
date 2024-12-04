@@ -457,10 +457,13 @@ class FairnessAdjuster(Transformer):
             )[:, 0]
 
             # get the adjuster predictions
-            batch_feed_dict[self.base_pred_ph] = batch_base_pred_logits
-            batch_adjuster_preds = self.adjuster_sess.run(
-                self.adjuster_preds, feed_dict=batch_feed_dict
-            )[:, 0]
+            if hasattr(self, "adjuster_preds"):
+                batch_feed_dict[self.base_pred_ph] = batch_base_pred_logits
+                batch_adjuster_preds = self.adjuster_sess.run(
+                    self.adjuster_preds, feed_dict=batch_feed_dict
+                )[:, 0]
+            else:
+                batch_adjuster_preds = 0.0
 
             # apply the adjuster predictions fo the predicted logits
             batch_pred_logits = tf.nn.sigmoid(
