@@ -354,14 +354,14 @@ class FairnessAdjuster(Transformer):
             adjuster_grads = []
             # compute the adjuster gradients
             for grad, var in adjuster_opt.compute_gradients(adjuster_loss, var_list=adjuster_vars):
-                adjuster_grads.append((grad, var))
-
                 if self.debias:
                     # Subtract of the component of the gradient that aligns with the adversary
                     unit_adversary_grad = normalize(adversary_grads[var])
                     grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
 
                     grad -= self.adversary_loss_weight * adversary_grads[var]
+
+                adjuster_grads.append((grad, var))
 
             adjuster_minimizer = adjuster_opt.apply_gradients(
                 adjuster_grads, global_step=global_step2
