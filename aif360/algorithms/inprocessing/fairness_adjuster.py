@@ -301,7 +301,7 @@ class FairnessAdjuster(Transformer):
                 starter_learning_rate, global_step2, 1000, 0.96, staircase=True
             )
             # adjuster_opt = tf.train.AdamOptimizer(learning_rate)
-            adjuster_opt = tf.train.GradientDescentOptimizer(starter_learning_rate * 2)
+            adjuster_opt = tf.train.GradientDescentOptimizer(starter_learning_rate * 0.1)
             if self.debias:
                 adversary_opt = tf.train.AdamOptimizer(learning_rate)
 
@@ -354,7 +354,7 @@ class FairnessAdjuster(Transformer):
             self.adjuster_sess.run(tf.local_variables_initializer())
 
             # Begin training
-            for epoch in range(self.num_epochs):
+            for epoch in range(self.num_epochs // 10):
                 shuffled_ids = np.random.choice(num_train_samples, num_train_samples, replace=False)
                 for i in range(num_train_samples // self.batch_size):
                     batch_ids = shuffled_ids[self.batch_size * i : self.batch_size * (i + 1)]
