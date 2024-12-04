@@ -274,7 +274,7 @@ class FairnessAdjuster(Transformer):
             )
 
             # apply the adjuster's predictions to the base model's predictions
-            logit = lambda x: tf.math.log(x / (1 - x))
+            logit = lambda p: tf.math.log(p / (1 - p))
 
             # note: adjuster predictions should not be updated during prediction
             pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
@@ -299,7 +299,8 @@ class FairnessAdjuster(Transformer):
             learning_rate = tf.train.exponential_decay(
                 starter_learning_rate, global_step2, 1000, 0.96, staircase=True
             )
-            adjuster_opt = tf.train.AdamOptimizer(learning_rate)
+            # adjuster_opt = tf.train.AdamOptimizer(learning_rate)
+            adjuster_opt = tf.train.SGDOptimizer(learning_rate)
             if self.debias:
                 adversary_opt = tf.train.AdamOptimizer(learning_rate)
 
@@ -331,10 +332,10 @@ class FairnessAdjuster(Transformer):
                 adjuster_grads.append((grad, var))
 
                 if self.debias:
-                    unit_adversary_grad = normalize(adversary_grads[var])
-
                     # Subtract of the component of the gradient that aligns with the adversary
+                    # unit_adversary_grad = normalize(adversary_grads[var])
                     # grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
+
                     grad -= self.adversary_loss_weight * adversary_grads[var]
 
             adjuster_minimizer = adjuster_opt.apply_gradients(
