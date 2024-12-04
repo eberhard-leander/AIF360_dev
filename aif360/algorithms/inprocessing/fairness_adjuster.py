@@ -311,7 +311,8 @@ class FairnessAdjuster(Transformer):
             adjuster_opt = tf.train.AdagradOptimizer(learning_rate)
             # adjuster_opt = tf.train.GradientDescentOptimizer(starter_learning_rate * 0.1)
             if self.debias:
-                adversary_opt = tf.train.AdamOptimizer(learning_rate)
+                # adversary_opt = tf.train.AdamOptimizer(learning_rate)
+                adversary_opt = tf.train.AdagradOptimizer(learning_rate)
 
             adjuster_vars = [
                 var
