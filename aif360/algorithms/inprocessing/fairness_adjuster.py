@@ -118,9 +118,6 @@ class FairnessAdjuster(Transformer):
                 [features_dim, self.classifier_num_hidden_units],
                 initializer=tf.initializers.glorot_uniform(seed=self.seeds[3]),
             )
-            # W1 = tf.Variable(
-            #     tf.zeros(shape=[features_dim, self.classifier_num_hidden_units], name="W1")
-            # )
 
             b1 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1")
 
@@ -132,7 +129,6 @@ class FairnessAdjuster(Transformer):
                 [self.classifier_num_hidden_units, 1],
                 initializer=tf.initializers.glorot_uniform(seed=self.seeds[5]),
             )
-            # W2 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units, 1], name="W2"))
 
             b2 = tf.Variable(tf.zeros(shape=[1]), name="b2")
 
@@ -319,11 +315,8 @@ class FairnessAdjuster(Transformer):
                 starter_learning_rate, global_step2, 1000, 0.96, staircase=True
             )
             adjuster_opt = tf.train.AdamOptimizer(learning_rate)
-            # adjuster_opt = tf.train.AdagradOptimizer(learning_rate)
-            # adjuster_opt = tf.train.GradientDescentOptimizer(starter_learning_rate * 0.1)
             if self.debias:
                 adversary_opt = tf.train.AdamOptimizer(learning_rate)
-                # adversary_opt = tf.train.AdagradOptimizer(learning_rate)
 
             adjuster_vars = [
                 var
@@ -366,7 +359,7 @@ class FairnessAdjuster(Transformer):
                 with tf.control_dependencies([adjuster_minimizer]):
                     adversary_minimizer = adversary_opt.minimize(
                         pred_protected_attributes_loss, var_list=adversary_vars
-                    )  # , global_step=global_step2)
+                    )
 
             self.adjuster_sess.run(tf.global_variables_initializer())
             self.adjuster_sess.run(tf.local_variables_initializer())
@@ -432,9 +425,6 @@ class FairnessAdjuster(Transformer):
                                 "epoch %d; iter: %d; batch adjuster loss: %f"
                                 % (epoch, i, adjuster_norm_loss_value)
                             )
-
-        writer = tf.summary.FileWriter("output", self.adjuster_sess.graph)
-        writer.close()
         return self
 
     def predict(self, dataset):
