@@ -291,17 +291,16 @@ class FairnessAdjuster(Transformer):
                     )
                 )
 
-                if self.debias:
-                    # Obtain adversary predictions and adversary loss
-                    pred_protected_attributes_labels, pred_protected_attributes_logits = (
-                        self._adversary_model(pred_logits, self.true_labels_ph)
+                # Obtain adversary predictions and adversary loss
+                pred_protected_attributes_labels, pred_protected_attributes_logits = (
+                    self._adversary_model(pred_logits, self.true_labels_ph)
+                )
+                pred_protected_attributes_loss = tf.reduce_mean(
+                    tf.nn.sigmoid_cross_entropy_with_logits(
+                        labels=self.protected_attributes_ph,
+                        logits=pred_protected_attributes_logits,
                     )
-                    pred_protected_attributes_loss = tf.reduce_mean(
-                        tf.nn.sigmoid_cross_entropy_with_logits(
-                            labels=self.protected_attributes_ph,
-                            logits=pred_protected_attributes_logits,
-                        )
-                    )
+                )
 
                 pred_labels_loss = tf.reduce_mean(
                     tf.nn.sigmoid_cross_entropy_with_logits(
@@ -316,27 +315,25 @@ class FairnessAdjuster(Transformer):
                     starter_learning_rate, global_step2, 1000, 0.96, staircase=True
                 )
                 adjuster_opt = tf.train.AdamOptimizer(learning_rate)
-                if self.debias:
-                    adversary_opt = tf.train.AdamOptimizer(learning_rate)
+                adversary_opt = tf.train.AdamOptimizer(learning_rate)
 
                 adjuster_vars = [
                     var
                     for var in tf.trainable_variables(scope=self.scope_name)
                     if "adjuster_model" in var.name
                 ]
-                if self.debias:
-                    adversary_vars = [
-                        var
-                        for var in tf.trainable_variables(scope=self.scope_name)
-                        if "adversary_model" in var.name
-                    ]
-                    # Update adjuster parameters
-                    adversary_grads = {
-                        var: grad
-                        for (grad, var) in adversary_opt.compute_gradients(
-                            pred_protected_attributes_loss, var_list=adjuster_vars
-                        )
-                    }
+                adversary_vars = [
+                    var
+                    for var in tf.trainable_variables(scope=self.scope_name)
+                    if "adversary_model" in var.name
+                ]
+                # Update adjuster parameters
+                adversary_grads = {
+                    var: grad
+                    for (grad, var) in adversary_opt.compute_gradients(
+                        pred_protected_attributes_loss, var_list=adjuster_vars
+                    )
+                }
                 normalize = lambda x: x / (tf.norm(x) + np.finfo(np.float32).tiny)
 
                 adjuster_grads = []
@@ -344,12 +341,11 @@ class FairnessAdjuster(Transformer):
                 for grad, var in adjuster_opt.compute_gradients(
                     adjuster_loss, var_list=adjuster_vars
                 ):
-                    if self.debias:
-                        # Subtract of the component of the gradient that aligns with the adversary
-                        unit_adversary_grad = normalize(adversary_grads[var])
-                        grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
+                    # Subtract of the component of the gradient that aligns with the adversary
+                    unit_adversary_grad = normalize(adversary_grads[var])
+                    grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
 
-                        grad -= self.adversary_loss_weight * adversary_grads[var]
+                    grad -= self.adversary_loss_weight * adversary_grads[var]
 
                     adjuster_grads.append((grad, var))
 
@@ -357,12 +353,11 @@ class FairnessAdjuster(Transformer):
                     adjuster_grads, global_step=global_step2
                 )
 
-                if self.debias:
-                    # Update adversary parameters
-                    with tf.control_dependencies([adjuster_minimizer]):
-                        adversary_minimizer = adversary_opt.minimize(
-                            pred_protected_attributes_loss, var_list=adversary_vars
-                        )
+                # Update adversary parameters
+                with tf.control_dependencies([adjuster_minimizer]):
+                    adversary_minimizer = adversary_opt.minimize(
+                        pred_protected_attributes_loss, var_list=adversary_vars
+                    )
 
                 self.adjuster_sess.run(tf.global_variables_initializer())
                 self.adjuster_sess.run(tf.local_variables_initializer())
@@ -395,43 +390,33 @@ class FairnessAdjuster(Transformer):
                             self.keep_prob: 0.8,
                             self.base_pred_ph: batch_base_predictions,
                         }
-                        if self.debias:
-                            (
-                                _,
-                                _,
-                                adjuster_norm_loss_value,
-                                pred_labels_loss_value,
-                                pred_protected_attributes_loss_vale,
-                            ) = self.adjuster_sess.run(
-                                [
-                                    adjuster_minimizer,
-                                    adversary_minimizer,
-                                    adjuster_loss,
-                                    pred_labels_loss,
-                                    pred_protected_attributes_loss,
-                                ],
-                                feed_dict=batch_feed_dict,
-                            )
-                            if i % 200 == 0:
-                                print(
-                                    "epoch %d; iter: %d; batch adjuster loss: %f; batch classifier loss; %f; batch adversarial loss: %f"
-                                    % (
-                                        epoch,
-                                        i,
-                                        adjuster_norm_loss_value,
-                                        pred_labels_loss_value,
-                                        pred_protected_attributes_loss_vale,
-                                    )
+                        (
+                            _,
+                            _,
+                            adjuster_norm_loss_value,
+                            pred_labels_loss_value,
+                            pred_protected_attributes_loss_vale,
+                        ) = self.adjuster_sess.run(
+                            [
+                                adjuster_minimizer,
+                                adversary_minimizer,
+                                adjuster_loss,
+                                pred_labels_loss,
+                                pred_protected_attributes_loss,
+                            ],
+                            feed_dict=batch_feed_dict,
+                        )
+                        if i % 200 == 0:
+                            print(
+                                "epoch %d; iter: %d; batch adjuster loss: %f; batch classifier loss; %f; batch adversarial loss: %f"
+                                % (
+                                    epoch,
+                                    i,
+                                    adjuster_norm_loss_value,
+                                    pred_labels_loss_value,
+                                    pred_protected_attributes_loss_vale,
                                 )
-                        else:
-                            _, adjuster_norm_loss_value = self.adjuster_sess.run(
-                                [adjuster_minimizer, adjuster_loss], feed_dict=batch_feed_dict
                             )
-                            if i % 200 == 0:
-                                print(
-                                    "epoch %d; iter: %d; batch adjuster loss: %f"
-                                    % (epoch, i, adjuster_norm_loss_value)
-                                )
         return self
 
     def predict(self, dataset):
