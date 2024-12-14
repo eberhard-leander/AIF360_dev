@@ -65,7 +65,9 @@ class FairnessAdjuster(Transformer):
         self.unprivileged_groups = unprivileged_groups
         self.privileged_groups = privileged_groups
         if len(self.unprivileged_groups) > 1 or len(self.privileged_groups) > 1:
-            raise ValueError("Only one unprivileged_group or privileged_group supported.")
+            raise ValueError(
+                "Only one unprivileged_group or privileged_group supported."
+            )
         self.protected_attribute_name = list(self.unprivileged_groups[0].keys())[0]
 
         # separate session for the base model and the adjuster since the base model should be fixed
@@ -93,7 +95,9 @@ class FairnessAdjuster(Transformer):
                 [features_dim, self.classifier_num_hidden_units],
                 initializer=tf.initializers.glorot_uniform(seed=self.seeds[0]),
             )
-            b1 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1")
+            b1 = tf.Variable(
+                tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1"
+            )
 
             h1 = tf.nn.relu(tf.matmul(features, W1) + b1)
             h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seeds[1])
@@ -119,7 +123,9 @@ class FairnessAdjuster(Transformer):
                 initializer=tf.initializers.glorot_uniform(seed=self.seeds[3]),
             )
 
-            b1 = tf.Variable(tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1")
+            b1 = tf.Variable(
+                tf.zeros(shape=[self.classifier_num_hidden_units]), name="b1"
+            )
 
             h1 = tf.nn.relu(tf.matmul(features, W1) + b1)
             h1 = tf.nn.dropout(h1, keep_prob=keep_prob, seed=self.seeds[4])
@@ -144,18 +150,23 @@ class FairnessAdjuster(Transformer):
             s = tf.sigmoid((1 + tf.abs(c)) * pred_logits)
 
             W2 = tf.get_variable(
-                "W2", [3, 1], initializer=tf.initializers.glorot_uniform(seed=self.seeds[6])
+                "W2",
+                [3, 1],
+                initializer=tf.initializers.glorot_uniform(seed=self.seeds[6]),
             )
             b2 = tf.Variable(tf.zeros(shape=[1]), name="b2")
 
             pred_protected_attribute_logit = (
-                tf.matmul(tf.concat([s, s * true_labels, s * (1.0 - true_labels)], axis=1), W2) + b2
+                tf.matmul(
+                    tf.concat([s, s * true_labels, s * (1.0 - true_labels)], axis=1), W2
+                )
+                + b2
             )
             pred_protected_attribute_label = tf.sigmoid(pred_protected_attribute_logit)
 
         return pred_protected_attribute_label, pred_protected_attribute_logit
 
-    def fit(self, dataset):
+    def fit(self, dataset, verbose=True):
         """Compute the model parameters of the fair classifier using gradient
         descent.
 
@@ -236,15 +247,21 @@ class FairnessAdjuster(Transformer):
 
             # Begin training
             for epoch in range(self.num_epochs):
-                shuffled_ids = np.random.choice(num_train_samples, num_train_samples, replace=False)
+                shuffled_ids = np.random.choice(
+                    num_train_samples, num_train_samples, replace=False
+                )
                 for i in range(num_train_samples // self.batch_size):
-                    batch_ids = shuffled_ids[self.batch_size * i : self.batch_size * (i + 1)]
+                    batch_ids = shuffled_ids[
+                        self.batch_size * i : self.batch_size * (i + 1)
+                    ]
                     batch_features = dataset.features[batch_ids]
                     batch_labels = np.reshape(temp_labels[batch_ids], [-1, 1])
                     batch_protected_attributes = np.reshape(
                         dataset.protected_attributes[batch_ids][
                             :,
-                            dataset.protected_attribute_names.index(self.protected_attribute_name),
+                            dataset.protected_attribute_names.index(
+                                self.protected_attribute_name
+                            ),
                         ],
                         [-1, 1],
                     )
@@ -257,40 +274,44 @@ class FairnessAdjuster(Transformer):
                     }
 
                     _, pred_labels_loss_value = self.base_sess.run(
-                        [classifier_minimizer, pred_labels_loss], feed_dict=batch_feed_dict
+                        [classifier_minimizer, pred_labels_loss],
+                        feed_dict=batch_feed_dict,
                     )
-                    if i % 200 == 0:
-                        print(
-                            "epoch %d; iter: %d; batch classifier loss: %f"
-                            % (epoch, i, pred_labels_loss_value)
-                        )
+                    if verbose:
+                        if i % 200 == 0:
+                            print(
+                                "epoch %d; iter: %d; batch classifier loss: %f"
+                                % (epoch, i, pred_labels_loss_value)
+                            )
 
         # get the scores from the base classifier. This is a numpy array
-        self._base_classifier_scores = self.predict(dataset).scores.astype(np.float32).copy()
+        self._base_classifier_scores = (
+            self.predict(dataset).scores.astype(np.float32).copy()
+        )
 
         #################################################################################
         # adjust the predictions of the base classifier with the fairness adjuster
         # code largely copied over from the adversarial debiasing implementation
         #################################################################################
-        if self.debias:
-            with tf.variable_scope(self.scope_name):
-                num_train_samples, self.features_dim = np.shape(dataset.features)
+        with tf.variable_scope(self.scope_name):
+            num_train_samples, self.features_dim = np.shape(dataset.features)
 
-                # Obtain adjusted predictions and adjuster loss
-                self.adjuster_preds = self._adjuster_model(
-                    self.features_ph, self.features_dim, self.keep_prob
+            # Obtain adjusted predictions and adjuster loss
+            self.adjuster_preds = self._adjuster_model(
+                self.features_ph, self.features_dim, self.keep_prob
+            )
+
+            # note: base predictions should not be updated during prediction
+            pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
+
+            # mean of the squared adjuster predictions
+            adjuster_loss = tf.reduce_mean(
+                tf.losses.mean_squared_error(
+                    tf.zeros_like(self.adjuster_preds), self.adjuster_preds
                 )
+            )
 
-                # note: base predictions should not be updated during prediction
-                pred_logits = logit(self.base_pred_ph) + self.adjuster_preds
-
-                # mean of the squared adjuster predictions
-                adjuster_loss = tf.reduce_mean(
-                    tf.losses.mean_squared_error(
-                        tf.zeros_like(self.adjuster_preds), self.adjuster_preds
-                    )
-                )
-
+            if self.debias:
                 # Obtain adversary predictions and adversary loss
                 pred_protected_attributes_labels, pred_protected_attributes_logits = (
                     self._adversary_model(pred_logits, self.true_labels_ph)
@@ -302,26 +323,28 @@ class FairnessAdjuster(Transformer):
                     )
                 )
 
-                pred_labels_loss = tf.reduce_mean(
-                    tf.nn.sigmoid_cross_entropy_with_logits(
-                        labels=self.true_labels_ph, logits=pred_logits
-                    )
+            pred_labels_loss = tf.reduce_mean(
+                tf.nn.sigmoid_cross_entropy_with_logits(
+                    labels=self.true_labels_ph, logits=pred_logits
                 )
+            )
 
-                # Setup optimizers with learning rates
-                global_step2 = tf.Variable(0, trainable=False)
-                starter_learning_rate = 0.001
-                learning_rate = tf.train.exponential_decay(
-                    starter_learning_rate, global_step2, 1000, 0.96, staircase=True
-                )
-                adjuster_opt = tf.train.AdamOptimizer(learning_rate)
+            # Setup optimizers with learning rates
+            global_step2 = tf.Variable(0, trainable=False)
+            starter_learning_rate = 0.001
+            learning_rate = tf.train.exponential_decay(
+                starter_learning_rate, global_step2, 1000, 0.96, staircase=True
+            )
+            adjuster_opt = tf.train.AdamOptimizer(learning_rate)
+            if self.debias:
                 adversary_opt = tf.train.AdamOptimizer(learning_rate)
 
-                adjuster_vars = [
-                    var
-                    for var in tf.trainable_variables(scope=self.scope_name)
-                    if "adjuster_model" in var.name
-                ]
+            adjuster_vars = [
+                var
+                for var in tf.trainable_variables(scope=self.scope_name)
+                if "adjuster_model" in var.name
+            ]
+            if self.debias:
                 adversary_vars = [
                     var
                     for var in tf.trainable_variables(scope=self.scope_name)
@@ -334,62 +357,69 @@ class FairnessAdjuster(Transformer):
                         pred_protected_attributes_loss, var_list=adjuster_vars
                     )
                 }
-                normalize = lambda x: x / (tf.norm(x) + np.finfo(np.float32).tiny)
+            normalize = lambda x: x / (tf.norm(x) + np.finfo(np.float32).tiny)
 
-                adjuster_grads = []
-                # compute the adjuster gradients
-                for grad, var in adjuster_opt.compute_gradients(
-                    adjuster_loss, var_list=adjuster_vars
-                ):
+            adjuster_grads = []
+            # compute the adjuster gradients
+            for grad, var in adjuster_opt.compute_gradients(
+                adjuster_loss, var_list=adjuster_vars
+            ):
+                if self.debias:
                     # Subtract of the component of the gradient that aligns with the adversary
                     unit_adversary_grad = normalize(adversary_grads[var])
-                    grad -= tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
+                    grad -= (
+                        tf.reduce_sum(grad * unit_adversary_grad) * unit_adversary_grad
+                    )
 
                     grad -= self.adversary_loss_weight * adversary_grads[var]
 
-                    adjuster_grads.append((grad, var))
+                adjuster_grads.append((grad, var))
 
-                adjuster_minimizer = adjuster_opt.apply_gradients(
-                    adjuster_grads, global_step=global_step2
-                )
+            adjuster_minimizer = adjuster_opt.apply_gradients(
+                adjuster_grads, global_step=global_step2
+            )
 
+            if self.debias:
                 # Update adversary parameters
                 with tf.control_dependencies([adjuster_minimizer]):
                     adversary_minimizer = adversary_opt.minimize(
                         pred_protected_attributes_loss, var_list=adversary_vars
                     )
 
-                self.adjuster_sess.run(tf.global_variables_initializer())
-                self.adjuster_sess.run(tf.local_variables_initializer())
+            self.adjuster_sess.run(tf.global_variables_initializer())
+            self.adjuster_sess.run(tf.local_variables_initializer())
 
-                # Begin training
-                for epoch in range(self.num_epochs):
-                    shuffled_ids = np.random.choice(
-                        num_train_samples, num_train_samples, replace=False
+            # Begin training
+            for epoch in range(self.num_epochs):
+                shuffled_ids = np.random.choice(
+                    num_train_samples, num_train_samples, replace=False
+                )
+                for i in range(num_train_samples // self.batch_size):
+                    batch_ids = shuffled_ids[
+                        self.batch_size * i : self.batch_size * (i + 1)
+                    ]
+                    batch_features = dataset.features[batch_ids]
+                    batch_labels = np.reshape(temp_labels[batch_ids], [-1, 1])
+                    batch_protected_attributes = np.reshape(
+                        dataset.protected_attributes[batch_ids][
+                            :,
+                            dataset.protected_attribute_names.index(
+                                self.protected_attribute_name
+                            ),
+                        ],
+                        [-1, 1],
                     )
-                    for i in range(num_train_samples // self.batch_size):
-                        batch_ids = shuffled_ids[self.batch_size * i : self.batch_size * (i + 1)]
-                        batch_features = dataset.features[batch_ids]
-                        batch_labels = np.reshape(temp_labels[batch_ids], [-1, 1])
-                        batch_protected_attributes = np.reshape(
-                            dataset.protected_attributes[batch_ids][
-                                :,
-                                dataset.protected_attribute_names.index(
-                                    self.protected_attribute_name
-                                ),
-                            ],
-                            [-1, 1],
-                        )
 
-                        batch_base_predictions = self._base_classifier_scores[batch_ids]
+                    batch_base_predictions = self._base_classifier_scores[batch_ids]
 
-                        batch_feed_dict = {
-                            self.features_ph: batch_features,
-                            self.true_labels_ph: batch_labels,
-                            self.protected_attributes_ph: batch_protected_attributes,
-                            self.keep_prob: 0.8,
-                            self.base_pred_ph: batch_base_predictions,
-                        }
+                    batch_feed_dict = {
+                        self.features_ph: batch_features,
+                        self.true_labels_ph: batch_labels,
+                        self.protected_attributes_ph: batch_protected_attributes,
+                        self.keep_prob: 0.8,
+                        self.base_pred_ph: batch_base_predictions,
+                    }
+                    if self.debias:
                         (
                             _,
                             _,
@@ -406,17 +436,29 @@ class FairnessAdjuster(Transformer):
                             ],
                             feed_dict=batch_feed_dict,
                         )
-                        if i % 200 == 0:
-                            print(
-                                "epoch %d; iter: %d; batch adjuster loss: %f; batch classifier loss; %f; batch adversarial loss: %f"
-                                % (
-                                    epoch,
-                                    i,
-                                    adjuster_norm_loss_value,
-                                    pred_labels_loss_value,
-                                    pred_protected_attributes_loss_vale,
+                        if verbose:
+                            if i % 200 == 0:
+                                print(
+                                    "epoch %d; iter: %d; batch adjuster loss: %f; batch classifier loss; %f; batch adversarial loss: %f"
+                                    % (
+                                        epoch,
+                                        i,
+                                        adjuster_norm_loss_value,
+                                        pred_labels_loss_value,
+                                        pred_protected_attributes_loss_vale,
+                                    )
                                 )
-                            )
+                    else:
+                        _, adjuster_norm_loss_value = self.adjuster_sess.run(
+                            [adjuster_minimizer, adjuster_loss],
+                            feed_dict=batch_feed_dict,
+                        )
+                        if verbose:
+                            if i % 200 == 0:
+                                print(
+                                    "epoch %d; iter: %d; batch adjuster loss: %f"
+                                    % (epoch, i, adjuster_norm_loss_value)
+                                )
         return self
 
     def predict(self, dataset):
@@ -448,7 +490,10 @@ class FairnessAdjuster(Transformer):
             batch_labels = np.reshape(dataset.labels[batch_ids], [-1, 1])
             batch_protected_attributes = np.reshape(
                 dataset.protected_attributes[batch_ids][
-                    :, dataset.protected_attribute_names.index(self.protected_attribute_name)
+                    :,
+                    dataset.protected_attribute_names.index(
+                        self.protected_attribute_name
+                    ),
                 ],
                 [-1, 1],
             )
@@ -466,7 +511,9 @@ class FairnessAdjuster(Transformer):
 
             # get the adjuster predictions
             if hasattr(self, "adjuster_preds"):
-                batch_feed_dict[self.base_pred_ph] = batch_base_pred_logits.reshape(-1, 1)
+                batch_feed_dict[self.base_pred_ph] = batch_base_pred_logits.reshape(
+                    -1, 1
+                )
 
                 batch_adjuster_preds = self.adjuster_sess.run(
                     self.adjuster_preds, feed_dict=batch_feed_dict
@@ -475,7 +522,9 @@ class FairnessAdjuster(Transformer):
                 batch_adjuster_preds = 0.0
 
             # apply the adjuster predictions to the predicted logits
-            batch_pred_logits = expit(batch_base_pred_logits + batch_adjuster_preds).tolist()
+            batch_pred_logits = expit(
+                batch_base_pred_logits + batch_adjuster_preds
+            ).tolist()
 
             pred_labels += batch_pred_logits
 
@@ -484,7 +533,9 @@ class FairnessAdjuster(Transformer):
         # Mutated, fairer dataset with new labels
         dataset_new = dataset.copy(deepcopy=True)
         dataset_new.scores = np.array(pred_labels, dtype=np.float64).reshape(-1, 1)
-        dataset_new.labels = (np.array(pred_labels) > 0.5).astype(np.float64).reshape(-1, 1)
+        dataset_new.labels = (
+            (np.array(pred_labels) > 0.5).astype(np.float64).reshape(-1, 1)
+        )
 
         # Map the dataset labels to back to their original values.
         temp_labels = dataset_new.labels.copy()
