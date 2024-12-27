@@ -37,7 +37,8 @@ class XGBAdversarialDebiasing(Transformer):
         debias=True,
         adversary_loss_weight=0.1,
         protected_group_vector=None,
-        **kwargs
+        debug=False,
+        **kwargs,
     ):
         """
         Args:
@@ -78,6 +79,7 @@ class XGBAdversarialDebiasing(Transformer):
                 protected_attr=protected_group_vector,
                 adversary_weight=adversary_loss_weight,
                 seed=seed,
+                debug=debug,
             )
             self.estimator = XGBClassifier(objective=self.objective, **kwargs)
         else:
@@ -131,3 +133,6 @@ class XGBAdversarialDebiasing(Transformer):
         dataset_new.labels = temp_labels.copy()
 
         return dataset_new
+
+    def predict_proba(self, dataset):
+        return self.estimator.predict_proba(dataset.features)
