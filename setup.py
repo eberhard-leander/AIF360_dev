@@ -59,6 +59,7 @@ setup(name='aif360',
           'pandas>=0.24.0',
           'scikit-learn>=1.0',
           'matplotlib',
+          "flaml[automl]"
       ],
       extras_require=extras,
       package_data={'': ['*.md', '*.R']},
