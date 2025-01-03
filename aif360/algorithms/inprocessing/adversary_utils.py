@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from scipy.special import logit
+import xgboost
 
 bce_loss = torch.nn.BCELoss(reduction="sum")
 norm_loss = torch.nn.MSELoss(reduction="sum")
@@ -95,8 +96,19 @@ class AdversaryLoss:
 
     def __call__(self, y_true, y_pred):
         self.iter += 1
+        # print(f"Type y_pred {type(y_pred)}")
+        # print(f"Type dtrain {type(dtrain)}")
+        # print(f"Shape of preds is {y_pred.shape}")
+        # print(f"Shape of dtrain is {dtrain.shape}")
 
+        # y_true = dtrain.get_label()
         # classifier accuracy
+ 
+        # if isinstance(y_pred, xgboost.core.DMatrix):
+        #     y_pred = y_pred.get_data().toarray()
+        # print(f"Shape of preds is {y_pred.shape}")
+        # print(f"Shape of true is {y_true.shape}")
+
         prob = 1 / (1 + np.exp(-y_pred))
         classifier_grad = prob - y_true
         classifier_hess = prob * (1 - prob)

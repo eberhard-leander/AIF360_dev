@@ -1,8 +1,8 @@
 import numpy as np
+from .adversary_utils import AdversaryLoss
 
 try:
     from xgboost import XGBClassifier
-    from .adversary_utils import AdversaryLoss
 
 except ImportError as error:
     from logging import warning
@@ -14,7 +14,7 @@ except ImportError as error:
 
 from aif360.algorithms import Transformer
 from flaml import AutoML, tune
-from flaml.automl.model import XGBoostEstimator
+from flaml.automl.model import XGBoostSklearnEstimator
 
 
 
@@ -41,6 +41,8 @@ class XGBAdversarialDebiasing(Transformer):
         adversary_loss_weight=0.1,
         protected_group_vector=None,
         debug=False,
+        tune_hyperparameters=False,
+        tuning_settings=None,
         **kwargs,
     ):
         """
@@ -68,11 +70,11 @@ class XGBAdversarialDebiasing(Transformer):
             "estimator_list": [
                 "xgboost"
             ],  # list of ML learners; we tune XGBoost in this example
-            "task": "regression",  # task type
+            "task": "classification",  # task type
             "log_file_name": "XGBAdversarialDebiasing.log",  # flaml log file
             "seed": self.seed,  # random seed
-        }
-        self.estimator = AutoML()
+        }        
+        self.settings.update(tuning_settings)
         self.unprivileged_groups = unprivileged_groups
         self.privileged_groups = privileged_groups
         if len(self.unprivileged_groups) > 1 or len(self.privileged_groups) > 1:
@@ -86,25 +88,35 @@ class XGBAdversarialDebiasing(Transformer):
         #     raise ValueError("objective and debias cannot be set independently")
 
         self.debias = debias
-    
+        self.tune_hyperparameters = tune_hyperparameters
+        self.debias = debias
+
         if self.debias:
-            self.objective = AdversaryLoss(
+            objective = AdversaryLoss(
                 protected_attr=protected_group_vector,
                 adversary_weight=adversary_loss_weight,
                 seed=seed,
                 debug=debug,
             )
-            class AdversaryLossXGB(XGBoostEstimator):
-                """XGBoostEstimator with the logregobj function as the objective function"""
-                def __init__(self, **kwargs):
-                    super().__init__(objective=self.objective, **kwargs)
-
-            self.estimator.add_learner(learner_name="AdversaryLossXGB", learner_class=AdversaryLossXGB)
-            self.settings["estimator_list"] = ["AdversaryLossXGB"]  # change the estimator list
+            if tune_hyperparameters:
+                class AdversaryLossXGB(XGBoostSklearnEstimator):
+                    """XGBoostEstimator with the logregobj function as the objective function"""
+                    def __init__(self, **kwargs):
+                        super().__init__(objective=objective, **kwargs)
+                self.estimator = AutoML()
+                self.estimator.add_learner(learner_name="AdversaryLossXGB", learner_class=AdversaryLossXGB)
+                self.settings["estimator_list"] = ["AdversaryLossXGB"]  # change the estimator list
+            else:
+                self.estimator = XGBClassifier(objective=objective, **kwargs)
         else:
-            self.settings["estimator_list"] = ["xgboost"]  # change the estimator list
+            if tune_hyperparameters:
+                self.estimator = AutoML()
+                self.settings["estimator_list"] = ["xgboost"]  # change the estimator list
+            else:
+                self.estimator = XGBClassifier(**kwargs)
 
-    def fit(self, dataset):
+
+    def fit(self, dataset, test_dataset=None):
         """Compute the model parameters of the fair classifier using gradient
         descent.
 
@@ -114,6 +126,19 @@ class XGBAdversarialDebiasing(Transformer):
         Returns:
             AdversarialDebiasing: Returns self.
         """
+        train_X, train_Y = self.get_X_Y(dataset=dataset)
+        if test_dataset:
+            val_X, val_Y = self.get_X_Y(dataset=test_dataset) 
+        else:
+            val_X = val_Y = None
+        if self.tune_hyperparameters:
+            self.estimator.fit(X_train=train_X, y_train=train_Y, X_val=val_X, y_val=val_Y, **self.settings)
+        else:
+            self.estimator.fit(train_X, train_Y)
+
+        return self
+    
+    def get_X_Y(self, dataset):
         X = dataset.features
         # Map the dataset labels to 0 and 1.
         temp_labels = dataset.labels.copy()
@@ -121,9 +146,8 @@ class XGBAdversarialDebiasing(Transformer):
         temp_labels[(dataset.labels == dataset.favorable_label).ravel(), 0] = 1.0
         temp_labels[(dataset.labels == dataset.unfavorable_label).ravel(), 0] = 0.0
         Y = temp_labels
-        self.estimator.fit(X_train=X, y_train=Y, **self.settings)
+        return X, Y
 
-        return self
 
     def predict(self, dataset):
         """Obtain the predictions for the provided dataset using the fair
@@ -136,7 +160,7 @@ class XGBAdversarialDebiasing(Transformer):
             dataset (BinaryLabelDataset): Transformed dataset.
         """
 
-        preds = self.estimator.model.predict_proba(dataset.features)[:, 1]
+        preds = self.estimator.predict_proba(dataset.features)[:, 1]
 
         # Mutated, fairer dataset with new labels
         dataset_new = dataset.copy(deepcopy=True)
