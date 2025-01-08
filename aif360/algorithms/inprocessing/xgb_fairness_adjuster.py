@@ -60,7 +60,10 @@ class XGBFairnessAdjuster(Transformer):
             unprivileged_groups=unprivileged_groups, privileged_groups=privileged_groups
         )
         self.seed = seed
+        
         self.tune_hyperparameters_base = tune_hyperparameters_base
+        self.tune_hyperparameters_adjuster = tune_hyperparameters_adjuster
+    
         self.base_settings = {
             "time_budget": 60,  # total running time in seconds
             "estimator_list": [
@@ -69,7 +72,8 @@ class XGBFairnessAdjuster(Transformer):
             "task": "classification",  # task type
             "log_file_name": "XGBAdversarialDebiasing-Base.log",  # flaml log file
             "seed": self.seed,  # random seed
-        }     
+            "verbose": 2,
+        }
         self.adjuster_settings = {
             "time_budget": 60,  # total running time in seconds
             "estimator_list": [
@@ -78,9 +82,14 @@ class XGBFairnessAdjuster(Transformer):
             "task": "regression",  # task type
             "log_file_name": "XGBAdversarialDebiasing-Adjuster.log",  # flaml log file
             "seed": self.seed,  # random seed
-        }    
-        self.base_settings.update(tuning_settings_base) if tuning_settings_base else None
-        self.adjuster_settings.update(tuning_settings_adjuster) if tuning_settings_adjuster else None
+            "verbose": 2,
+        }
+        self.base_settings.update(
+            tuning_settings_base
+        ) if tuning_settings_base else None
+        self.adjuster_settings.update(
+            tuning_settings_adjuster
+        ) if tuning_settings_adjuster else None
 
         self.adversary_loss_weight = adversary_loss_weight
         self.unprivileged_groups = unprivileged_groups
@@ -96,13 +105,13 @@ class XGBFairnessAdjuster(Transformer):
         #     raise ValueError("objective and debias cannot be set independently")
         self.debug = debug
         self.debias = debias
-        self.tune_hyperparameters_adjuster = tune_hyperparameters_adjuster
         self.debias = debias
+        
         if tune_hyperparameters_base:
             self.base_estimator = AutoML()
         else:
             self.base_estimator = XGBClassifier(**kwargs)
-    
+
     def get_X_Y(self, dataset):
         X = dataset.features
         # Map the dataset labels to 0 and 1.
@@ -125,12 +134,18 @@ class XGBFairnessAdjuster(Transformer):
         """
         train_X, train_Y = self.get_X_Y(dataset=dataset)
         if test_dataset:
-            val_X, val_Y = self.get_X_Y(dataset=test_dataset) 
+            val_X, val_Y = self.get_X_Y(dataset=test_dataset)
         else:
             val_X = val_Y = None
-        
+
         if self.tune_hyperparameters_base:
-            self.base_estimator.fit(X_train=train_X, y_train=train_Y, X_val=val_X, y_val=val_Y, **self.base_settings)
+            self.base_estimator.fit(
+                X_train=train_X,
+                y_train=train_Y,
+                X_val=val_X,
+                y_val=val_Y,
+                **self.base_settings,
+            )
         else:
             self.base_estimator.fit(train_X, train_Y)
 
@@ -149,19 +164,33 @@ class XGBFairnessAdjuster(Transformer):
                 debug=self.debug,
             )
             if self.tune_hyperparameters_adjuster:
+
                 class AdjusterAdversaryLossXGB(XGBoostSklearnEstimator):
                     """XGBoostEstimator with the logregobj function as the objective function"""
+
                     def __init__(self, **kwargs):
                         super().__init__(objective=adjuster_loss, **kwargs)
+
                 self.model_adjuster = AutoML()
-                self.model_adjuster.add_learner(learner_name="AdjusterAdversaryLossXGB", learner_class=AdjusterAdversaryLossXGB)
-                self.adjuster_settings["estimator_list"] = ["AdjusterAdversaryLossXGB"]  # change the estimator list
-                self.model_adjuster.fit(X_train=train_X, y_train=train_Y, X_val=val_X, y_val=val_Y, **self.adjuster_settings)
+                self.model_adjuster.add_learner(
+                    learner_name="AdjusterAdversaryLossXGB",
+                    learner_class=AdjusterAdversaryLossXGB,
+                )
+                self.adjuster_settings["estimator_list"] = [
+                    "AdjusterAdversaryLossXGB"
+                ]  # change the estimator list
+                self.model_adjuster.fit(
+                    X_train=train_X,
+                    y_train=train_Y,
+                    X_val=val_X,
+                    y_val=val_Y,
+                    **self.adjuster_settings,
+                )
             else:
                 self.model_adjuster = XGBRegressor(
-                                objective=adjuster_loss,
-                                **kwargs,
-            )
+                    objective=adjuster_loss,
+                    **kwargs,
+                )
                 self.model_adjuster.fit(train_X, train_Y)
 
         return self
