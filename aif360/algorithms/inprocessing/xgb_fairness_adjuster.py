@@ -31,7 +31,8 @@ class XGBFairnessAdjuster(Transformer):
         debias=True,
         adversary_loss_weight=0.1,
         protected_group_vector=None,
-        **kwargs
+        debug=False,
+        **kwargs,
     ):
         """
         Args:
@@ -65,7 +66,7 @@ class XGBFairnessAdjuster(Transformer):
         # Check if objective is set correctly
         # if (objective is not None) ^ (debias):
         #     raise ValueError("objective and debias cannot be set independently")
-
+        self.debug = debug
         self.debias = debias
         self.base_estimator = XGBClassifier(**kwargs)
 
@@ -98,6 +99,7 @@ class XGBFairnessAdjuster(Transformer):
                 protected_attr=Z,
                 adversary_weight=self.adversary_loss_weight,
                 seed=self.seed,
+                debug=self.debug,
             )
             self.model_adjuster = XGBRegressor(
                 objective=self.adjuster_loss,
@@ -120,11 +122,7 @@ class XGBFairnessAdjuster(Transformer):
             dataset (BinaryLabelDataset): Transformed dataset.
         """
         dataset_new = dataset.copy(deepcopy=True)
-        preds = self.base_estimator.predict_proba(dataset.features)[:, 1]
-        if self.debias:
-            adjuster_preds = self.model_adjuster.predict(dataset.features)
-            preds = expit(logit(preds) + adjuster_preds)
-
+        preds = self.predict_proba(dataset_new)
         dataset_new.scores = np.array(preds, dtype=np.float64).reshape(-1, 1)
         dataset_new.labels = (np.array(preds) > 0.5).astype(np.float64).reshape(-1, 1)
         # Map the dataset labels to back to their original values.
@@ -135,3 +133,10 @@ class XGBFairnessAdjuster(Transformer):
 
         dataset_new.labels = temp_labels.copy()
         return dataset_new
+
+    def predict_proba(self, dataset):
+        preds = self.base_estimator.predict_proba(dataset.features)[:, 1]
+        if self.debias:
+            adjuster_preds = self.model_adjuster.predict(dataset.features)
+            preds = expit(logit(preds) + adjuster_preds)
+        return preds
