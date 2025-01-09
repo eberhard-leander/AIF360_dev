@@ -206,7 +206,7 @@ class AdjusterAdversaryLoss:
                 norm_hess = adjusted_pred * (1 - adjusted_pred)
             else:
                 # log loss with y_hat = as the true probabilities
-                adjusted_pred = np.clip(expit(y_pred + logit(self.base_preds)), eps, 1-eps)
+                adjusted_pred = expit(y_pred + logit(self.base_preds))
                 norm_grad = adjusted_pred - self.base_preds
                 norm_hess = adjusted_pred * (1 - adjusted_pred)
         else:
