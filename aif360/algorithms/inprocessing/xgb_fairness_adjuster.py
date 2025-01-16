@@ -41,7 +41,6 @@ class XGBFairnessAdjuster(Transformer):
         tuning_settings_adjuster=None,
         task="regression",
         use_target=False,
-        **kwargs,
     ):
         """
         Args:
@@ -111,11 +110,6 @@ class XGBFairnessAdjuster(Transformer):
         self.debug = debug
         self.debias = debias
         
-        if tune_hyperparameters_base:
-            self.base_estimator = AutoML()
-        else:
-            self.base_estimator = XGBClassifier(**kwargs)
-
         self.task = task
         self.use_target = use_target
 
@@ -139,6 +133,11 @@ class XGBFairnessAdjuster(Transformer):
         Returns:
             AdversarialDebiasing: Returns self.
         """
+        if self.tune_hyperparameters_base:
+            self.base_estimator = AutoML()
+        else:
+            self.base_estimator = XGBClassifier(**kwargs)
+        
         train_X, train_Y = self.get_X_Y(dataset=dataset)
         if test_dataset:
             val_X, val_Y = self.get_X_Y(dataset=test_dataset)
@@ -156,6 +155,7 @@ class XGBFairnessAdjuster(Transformer):
             best_params = self.base_estimator.best_config
         else:
             self.base_estimator.fit(train_X, train_Y)
+            best_params = {}
 
         self.base_probs = self.base_estimator.predict_proba(train_X)[:, 1]
         if self.debias:
