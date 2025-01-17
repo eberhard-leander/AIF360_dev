@@ -35,12 +35,16 @@ class XGBFairnessAdjuster(Transformer):
         adversary_loss_weight=0.1,
         protected_group_vector=None,
         debug=False,
+<<<<<<< HEAD
         tune_hyperparameters_base=False,
         tuning_settings_base=None,
         tune_hyperparameters_adjuster=False,
         tuning_settings_adjuster=None,
         task="regression",
         use_target=False,
+=======
+        **kwargs,
+>>>>>>> origin/main
     ):
         """
         Args:
@@ -169,8 +173,11 @@ class XGBFairnessAdjuster(Transformer):
                 adversary_weight=self.adversary_loss_weight,
                 seed=self.seed,
                 debug=self.debug,
+<<<<<<< HEAD
                 task=self.task,
                 use_target=self.use_target,
+=======
+>>>>>>> origin/main
             )
             kwargs.update(best_params)
             self.model_adjuster = XGBRegressor(
