@@ -38,14 +38,9 @@ class XGBAdversarialDebiasing(Transformer):
         seed=None,
         debias=True,
         adversary_loss_weight=0.1,
-<<<<<<< HEAD
         debug=False,
         tune_hyperparameters=False,
         tuning_settings=None,
-=======
-        protected_group_vector=None,
-        debug=False,
->>>>>>> origin/main
         **kwargs,
     ):
         """
@@ -92,23 +87,10 @@ class XGBAdversarialDebiasing(Transformer):
         #     raise ValueError("objective and debias cannot be set independently")
 
         self.debias = debias
-<<<<<<< HEAD
         self.tune_hyperparameters = tune_hyperparameters
         self.debias = debias
         self.adversary_loss_weight = adversary_loss_weight
         self.debug = debug
-=======
-        if self.debias:
-            self.objective = AdversaryLoss(
-                protected_attr=protected_group_vector,
-                adversary_weight=adversary_loss_weight,
-                seed=seed,
-                debug=debug,
-            )
-            self.estimator = XGBClassifier(objective=self.objective, **kwargs)
-        else:
-            self.estimator = XGBClassifier(**kwargs)
->>>>>>> origin/main
 
     def fit(self, dataset, test_dataset=None, **kwargs):
         """Compute the model parameters of the fair classifier using gradient
