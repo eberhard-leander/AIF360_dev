@@ -1,6 +1,7 @@
 import numpy as np
 import torch
-from scipy.special import logit
+from scipy.special import logit, expit
+import xgboost
 
 bce_loss = torch.nn.BCELoss(reduction="sum")
 norm_loss = torch.nn.MSELoss(reduction="sum")
@@ -22,7 +23,7 @@ class LogisticRegressionModel(torch.nn.Module):
         )  # Sigmoid activation for binary classification
 
 
-def logistic_regression_generator(seed=None):
+def logistic_regression_generator(seed=None, lr=0.1):
     if seed:
         torch.manual_seed(seed)
 
@@ -31,7 +32,7 @@ def logistic_regression_generator(seed=None):
     # log loss, aka binary cross entropy loss. We use mean here so that the learning rate is independent of the
     # data size
     criterion = torch.nn.BCELoss(reduction="mean")
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     # Training loop
     while True:
@@ -95,8 +96,19 @@ class AdversaryLoss:
 
     def __call__(self, y_true, y_pred):
         self.iter += 1
+        # print(f"Type y_pred {type(y_pred)}")
+        # print(f"Type dtrain {type(dtrain)}")
+        # print(f"Shape of preds is {y_pred.shape}")
+        # print(f"Shape of dtrain is {dtrain.shape}")
 
+        # y_true = dtrain.get_label()
         # classifier accuracy
+ 
+        # if isinstance(y_pred, xgboost.core.DMatrix):
+        #     y_pred = y_pred.get_data().toarray()
+        # print(f"Shape of preds is {y_pred.shape}")
+        # print(f"Shape of true is {y_true.shape}")
+
         prob = 1 / (1 + np.exp(-y_pred))
         classifier_grad = prob - y_true
         classifier_hess = prob * (1 - prob)
@@ -153,8 +165,9 @@ class AdversaryLoss:
 
 class AdjusterAdversaryLoss:
     def __init__(
-        self, base_preds, protected_attr, adversary_weight, seed=None, debug=False
+        self, base_preds, protected_attr, adversary_weight, seed=None, debug=False, task="regression", use_target=False,
     ):
+        self.base_preds = base_preds
         self.base_pred_logit_tensor = torch.tensor(
             logit(base_preds).astype(np.float32), requires_grad=False
         )
@@ -162,25 +175,48 @@ class AdjusterAdversaryLoss:
             protected_attr.astype(np.float32).reshape(-1, 1), requires_grad=False
         )
         self.adversary_weight = adversary_weight
-        self.adversary_generator = logistic_regression_generator(seed=seed)
+        self.adversary_generator = logistic_regression_generator(seed=seed, lr=0.1)
         next(self.adversary_generator)
 
         self.seed = seed
         self.debug = debug
 
+        self.task = task
+        self.use_target = use_target
+
         self.iter = 0
 
     def __call__(self, y_true, y_pred):
-        self.iter += 1
+        eps = 10e-6
 
-        # norm loss (equivalent to MSE with y_true = 0)
-        norm_grad = 2 * y_pred
-        norm_hess = 2 * np.ones(y_pred.shape)
+        self.iter += 1
+        
+        if self.task == "regression":
+            if self.use_target:
+                norm_grad = 2 * (y_pred + self.base_preds - y_true)
+                norm_hess = 2 * np.ones(y_pred.shape)
+            else:
+                # norm loss (equivalent to MSE with y_true = y_hat)
+                norm_grad = 2 * y_pred
+                norm_hess = 2 * np.ones(y_pred.shape)
+        elif self.task == "classification":
+            if self.use_target:
+                adjusted_pred = expit(y_pred + logit(self.base_preds))
+                norm_grad = adjusted_pred - y_true
+                norm_hess = adjusted_pred * (1 - adjusted_pred)
+            else:
+                # log loss with y_hat = as the true probabilities
+                adjusted_pred = expit(y_pred + logit(self.base_preds))
+                norm_grad = adjusted_pred - self.base_preds
+                norm_hess = adjusted_pred * (1 - adjusted_pred)
+        else:
+            raise ValueError(f"Task {self.task} not supported!")
 
         # Compute the adversary hessian and gradient
         adjuster_pred_tensor = torch.tensor(
             y_pred.astype(np.float32), requires_grad=True
         )
+
         pred_prob_tensor = torch.sigmoid(
             adjuster_pred_tensor + self.base_pred_logit_tensor
         )
@@ -220,7 +256,11 @@ class AdjusterAdversaryLoss:
             print(adversary_grad[:10])
             print(adversary_hess[:10])
 
-        grad = norm_grad - self.adversary_weight * adversary_grad
-        hess = norm_hess - self.adversary_weight * adversary_hess
+        if self.iter >= 10:
+            grad = norm_grad - self.adversary_weight * adversary_grad
+            hess = norm_hess - self.adversary_weight * adversary_hess
+        else:
+            grad = norm_grad
+            hess = norm_hess
 
         return grad, hess
