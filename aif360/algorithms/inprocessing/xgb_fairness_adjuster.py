@@ -23,6 +23,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class XGBoostSklearnEstimatorLimitTrees(XGBoostSklearnEstimator):
+    """
+    Set an upper bound on the number of trees for computational feasibility
+    """
+
+    @classmethod
+    def search_space(cls, data_size, **params):
+        space = super().search_space(data_size, **params)
+        space["n_estimators"]["domain"] = tune.randint(lower=1, upper=100)
+        return space
+
+
 class XGBFairnessAdjuster(Transformer):
     """
     Fairness adjuster using Adversarial Debiasing.
@@ -72,32 +84,17 @@ class XGBFairnessAdjuster(Transformer):
         self.base_settings = {
             "time_budget": 60,  # total running time in seconds
             "estimator_list": [
-                "xgboost"
+                "xgboost_limit_trees",
+                # "xgboost",
             ],  # list of ML learners; we tune XGBoost in this example
             "task": "classification",  # task type
             "log_file_name": "XGBAdversarialDebiasing-Base.log",  # flaml log file
             "seed": self.seed,  # random seed
             "verbose": verbose,
         }
-        self.adjuster_settings = {
-            "time_budget": 60,  # total running time in seconds
-            "estimator_list": [
-                "xgboost"
-            ],  # list of ML learners; we tune XGBoost in this example
-            "task": "regression",  # task type
-            "log_file_name": "XGBAdversarialDebiasing-Adjuster.log",  # flaml log file
-            "seed": self.seed,  # random seed
-            "verbose": verbose,
-            # "eval": "cv",
-        }
         (
             self.base_settings.update(tuning_settings_base)
             if tuning_settings_base
-            else None
-        )
-        (
-            self.adjuster_settings.update(tuning_settings_adjuster)
-            if tuning_settings_adjuster
             else None
         )
 
@@ -141,6 +138,10 @@ class XGBFairnessAdjuster(Transformer):
         """
         if self.tune_hyperparameters_base:
             self.base_estimator = AutoML()
+            self.base_estimator.add_learner(
+                learner_name="xgboost_limit_trees",
+                learner_class=XGBoostSklearnEstimatorLimitTrees,
+            )
         else:
             self.base_estimator = XGBClassifier(**kwargs)
 
@@ -179,6 +180,7 @@ class XGBFairnessAdjuster(Transformer):
                 use_target=self.use_target,
             )
             kwargs.update(best_params)
+
             self.model_adjuster = XGBRegressor(
                 objective=adjuster_loss,
                 **kwargs,

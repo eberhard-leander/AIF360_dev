@@ -3,6 +3,10 @@ import torch
 from scipy.special import logit, expit
 import xgboost
 
+NN_ITER_PER_XGB_ITER = 1
+XGB_ITER_BEFORE_ADVERSARY = 10
+
+
 bce_loss = torch.nn.BCELoss(reduction="sum")
 norm_loss = torch.nn.MSELoss(reduction="sum")
 
@@ -38,7 +42,7 @@ def logistic_regression_generator(seed=None, lr=0.1):
     while True:
         X, y = yield
 
-        for _ in range(1):
+        for _ in range(NN_ITER_PER_XGB_ITER):
             # Zero the gradient buffers
             optimizer.zero_grad()
 
@@ -153,7 +157,7 @@ class AdversaryLoss:
             print(adversary_grad[:10])
             print(adversary_hess[:10])
 
-        if self.iter >= 10:
+        if self.iter >= XGB_ITER_BEFORE_ADVERSARY:
             grad = classifier_grad - self.adversary_weight * adversary_grad
             hess = classifier_hess - self.adversary_weight * adversary_hess
         else:
@@ -256,7 +260,7 @@ class AdjusterAdversaryLoss:
             print(adversary_grad[:10])
             print(adversary_hess[:10])
 
-        if self.iter >= 10:
+        if self.iter >= XGB_ITER_BEFORE_ADVERSARY:
             grad = norm_grad - self.adversary_weight * adversary_grad
             hess = norm_hess - self.adversary_weight * adversary_hess
         else:
