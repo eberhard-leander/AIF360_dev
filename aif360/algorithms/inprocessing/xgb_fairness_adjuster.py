@@ -19,7 +19,21 @@ from aif360.algorithms import Transformer
 from flaml import AutoML, tune
 from flaml.automl.model import XGBoostSklearnEstimator
 import logging
-logger = logging.getLogger(__name__) 
+
+logger = logging.getLogger(__name__)
+
+
+class XGBoostSklearnEstimatorLimitTrees(XGBoostSklearnEstimator):
+    """
+    Set an upper bound on the number of trees for computational feasibility
+    """
+
+    @classmethod
+    def search_space(cls, data_size, **params):
+        space = super().search_space(data_size, **params)
+        space["n_estimators"]["domain"] = tune.randint(lower=1, upper=100)
+        return space
+
 
 class XGBFairnessAdjuster(Transformer):
     """
@@ -35,16 +49,12 @@ class XGBFairnessAdjuster(Transformer):
         adversary_loss_weight=0.1,
         protected_group_vector=None,
         debug=False,
-<<<<<<< HEAD
         tune_hyperparameters_base=False,
         tuning_settings_base=None,
         tune_hyperparameters_adjuster=False,
         tuning_settings_adjuster=None,
         task="regression",
         use_target=False,
-=======
-        **kwargs,
->>>>>>> origin/main
     ):
         """
         Args:
@@ -66,7 +76,7 @@ class XGBFairnessAdjuster(Transformer):
             unprivileged_groups=unprivileged_groups, privileged_groups=privileged_groups
         )
         self.seed = seed
-        
+
         self.tune_hyperparameters_base = tune_hyperparameters_base
         self.tune_hyperparameters_adjuster = tune_hyperparameters_adjuster
 
@@ -74,30 +84,19 @@ class XGBFairnessAdjuster(Transformer):
         self.base_settings = {
             "time_budget": 60,  # total running time in seconds
             "estimator_list": [
-                "xgboost"
+                "xgboost_limit_trees",
+                # "xgboost",
             ],  # list of ML learners; we tune XGBoost in this example
             "task": "classification",  # task type
             "log_file_name": "XGBAdversarialDebiasing-Base.log",  # flaml log file
             "seed": self.seed,  # random seed
             "verbose": verbose,
         }
-        self.adjuster_settings = {
-            "time_budget": 60,  # total running time in seconds
-            "estimator_list": [
-                "xgboost"
-            ],  # list of ML learners; we tune XGBoost in this example
-            "task": "regression",  # task type
-            "log_file_name": "XGBAdversarialDebiasing-Adjuster.log",  # flaml log file
-            "seed": self.seed,  # random seed
-            "verbose": verbose,
-            # "eval": "cv",
-        }
-        self.base_settings.update(
-            tuning_settings_base
-        ) if tuning_settings_base else None
-        self.adjuster_settings.update(
-            tuning_settings_adjuster
-        ) if tuning_settings_adjuster else None
+        (
+            self.base_settings.update(tuning_settings_base)
+            if tuning_settings_base
+            else None
+        )
 
         self.adversary_loss_weight = adversary_loss_weight
         self.unprivileged_groups = unprivileged_groups
@@ -113,7 +112,7 @@ class XGBFairnessAdjuster(Transformer):
         #     raise ValueError("objective and debias cannot be set independently")
         self.debug = debug
         self.debias = debias
-        
+
         self.task = task
         self.use_target = use_target
 
@@ -139,9 +138,13 @@ class XGBFairnessAdjuster(Transformer):
         """
         if self.tune_hyperparameters_base:
             self.base_estimator = AutoML()
+            self.base_estimator.add_learner(
+                learner_name="xgboost_limit_trees",
+                learner_class=XGBoostSklearnEstimatorLimitTrees,
+            )
         else:
             self.base_estimator = XGBClassifier(**kwargs)
-        
+
         train_X, train_Y = self.get_X_Y(dataset=dataset)
         if test_dataset:
             val_X, val_Y = self.get_X_Y(dataset=test_dataset)
@@ -173,13 +176,11 @@ class XGBFairnessAdjuster(Transformer):
                 adversary_weight=self.adversary_loss_weight,
                 seed=self.seed,
                 debug=self.debug,
-<<<<<<< HEAD
                 task=self.task,
                 use_target=self.use_target,
-=======
->>>>>>> origin/main
             )
             kwargs.update(best_params)
+
             self.model_adjuster = XGBRegressor(
                 objective=adjuster_loss,
                 **kwargs,
